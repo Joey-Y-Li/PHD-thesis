@@ -1,694 +1,775 @@
-\chapter{Protein-protein Interaction Binding Site Prediction: DELPHI}
-This chapter introduces our recent publication DELPHI \cite{li2020delphi} (\textcolor{red}{replace citation after paper accepted}), a deep learning based program for protein-protein interaction site prediction. We first describe the deep learning prerequisites used in DELPHI as well as the previous state-of-the-art methods. Then we describe both the algorithm and the implementation of DELPHI in details. Last, we compare DELPHI with nine state-of-the-art programs on five datasets showing that DELPHI outperforms other in all metrics. 
+\chapter{Protein-protein Interaction Prediction: SPRINT \label{chap_3}}
+This chapter describes our two publications regarding SPRINT (Scoring PRotein INTeractions) \cite{li2017sprint, li2020predicting}, a sequence based protein-protein interaction site prediction program. We first introduce the prerequisites used in SPRINT as well as the state-of-the-art methods. Then we describe both the algorithm and the implementation of SPRINT in details.  Last, we compare DELPHI with five state-of-the-art programs on seven datasets showing that it is more accurate while running orders of magnitude faster and using very little memory.
 \section{Background}
-\subsection{Deep Learning in Bioinformatics}
-Deep Learning is a branch of machine learning \cite{goodfellow2016deep}. It is inspired by the structure and function of the brain called artificial neural networks. From a high level, any computational programs can be considered mathematical transformation on given inputs. Traditional programs handcraft these mathematical computations while machine learning algorithms learn them. The mathematical transformation is learned from known examples, generally without being programmed with specific rules.
+In addition to the deep learning prerequisites introduced in Section \ref{set_AI_in_bioinfor}, we explain some preliminary algorithmic concepts used in the SPRINT algorithm in this section.
+\subsection{Homology Search}
+Homology search is a task to detect identical or similar segments among sequences. It is a routinely performed task DNA or protein sequences. Many bioinformatics programs highly depend on homology search, and quite a few algorithms have been proposed for this task. 
 
-For example, in the Handwritten Digit Recognition problem, researchers used to design specific rules to to capture the characteristics of each number. While in deep learning, only the structure of a network is built. The network "learns" the ability of telling a handwritten number by seeing a large amount of labeled data as shown in Fig. \ref{fig_dig_rec}.
-\begin{figure}[!h]
+The Smith-Waterman algorithm \cite{smith_waterman_1981} was proposed in the early 80's. This classic dynamic programming algorithm detects the optimal local alignment between two sequences. It guarantees to find the best solution, and that comes with the price of high time complexity. As shown in Figure \ref{fig_smith_waterman}, the Smith-Waterman algorithm works as two steps: Filling the scoring matrix and tracing back the optimal alignment. The value $S[i,j]$ in the position  $(i,j)$ is determined by three values around it: $S[i-1,j-1]$, $S[i-1,j]$, and $S[i,j-1]$. The detailed algorithm and analysis can be seen in \cite{smith_waterman_1981}. The worst time complexity is $O(mn)$ where $m$ and $n$ are the lengths of two sequences. This computationally expensive algorithm was soon overwhelmed by the amount of increasing biological data.
+
+\begin{figure}[h!]
+     \centering
+     \begin{subfigure}[b]{0.45\textwidth}
+         \centering
+         \includegraphics[width=\textwidth]{img/Smith_waterman_fill_matrix.png}
+        %  \caption{$y=3sinx$}
+        %  \label{fig_three sin x}
+     \end{subfigure}
+     \hfill
+     \begin{subfigure}[b]{0.45\textwidth}
+         \centering
+         \includegraphics[width=\textwidth]{img/Smith_waterman_backtra.png}
+        %  \caption{$y=5/x$}
+        %  \label{fig_five over x}
+     \end{subfigure}
+        \caption[The Smith-Waterman algorithm.]{The Smith-Waterman algorithm.}
+        \label{fig_smith_waterman}
+\end{figure}
+
+\subsubsection{BLAST seeds}
+Heuristic algorithms were proposed aiming to detecting similarities much faster and at the same time, detecting most of the similarities.
+
+The most noticeable algorithm and its suite is the the BLAST (Basic Local Alignment Search Tool) family \cite{Altschul90_BLAST, altschul1997PSI_BLAST}. BLATS serves as part of the pipelines for thousands of programs. The two papers together have had 157,399 citations till May 2020. 
+
+The key process in BLAST is called hit-and-extension. When identifying similarity, BLAST requires first short consecutive matches between two strings. Then the matched region extends to both the left and the right side to form a longer local alignment. This extension stops until the similarities of the detected region drops below a threshold. The default number for DNA sequences is eleven consecutive matches. Denoting the matches by 1's we obtain what is called a consecutive seed: 11111111111. A pair of identical consecutive matches is called a hit. The homology grows from the consecutive matches therefore they are called the seed. A seed often is used to refer to the way these eleven positions are selected.
+
+Figure \ref{fig_BLAST} shows an example of the hit-and-extension algorithm. When a hit is detected by the consecutive seed, marked with red color, BLAST extends this hit towards both sides (blue) until certain amount of mismatches are detected. 
+\\
+\begin{figure}[h!]
 \begin{center}
-\includegraphics[width = 9cm]{img/digit_recog.png}
-\caption{The labeled data in the Handwritten Digit Recognition problem. Each handwritten number (inside the black boxes) is labeled with its true value (above each handwritte number). From medium.com \label{fig_dig_rec}}
+\setlength{\tabcolsep}{4.5pt}
+\ttfamily{
+\begin{tabular}{ccccccccccccccccccccccccccc}
+\ & \ & \ & \ & \ & \ & \ & \ & \textbf{|} & $\leftarrow$ & \ & \ & \ & h & i & t & \ & \ & $\rightarrow$ & \textbf{|} & \ & \ & \ & \ & \ & \ & \\
+T & T & G & A & C & \textcolor{blue}{A} & \textcolor{blue}{T} & \textcolor{blue}{G} & \textcolor{red}{T} & \textcolor{red}{C} & \textcolor{red}{T} & \textcolor{red}{C} & \textcolor{red}{T} & \textcolor{red}{A} & \textcolor{red}{G} & \textcolor{red}{T} & \textcolor{red}{G} & \textcolor{red}{A} & \textcolor{red}{G} &\textcolor{red}{ T} & \textcolor{blue}{C} & \textcolor{blue}{T} & \textcolor{blue}{C} & T & A & T &\\ 
+| & | & \ & \ & \ & | & | & | & | & | & | & | & | & | & | & | & | & | & | & | & | & | & | & \ & \ & \ & \\ 
+T & T & A & C & T & \textcolor{blue}{A} & \textcolor{blue}{T} & \textcolor{blue}{G} & \textcolor{red}{T} & \textcolor{red}{C} & \textcolor{red}{T} & \textcolor{red}{C} & \textcolor{red}{T} & \textcolor{red}{A} & \textcolor{red}{G} & \textcolor{red}{T} & \textcolor{red}{G} & \textcolor{red}{A} & \textcolor{red}{G} &\textcolor{red}{ T} & \textcolor{blue}{C} & \textcolor{blue}{T} & \textcolor{blue}{C} & A & T & G &\\ 
+\ & \ & \ & \ & \ & \ & \ & \ & 1 & 1 & 1 & 1 & 1 & 1 & 1 & 1 & 1 & 1 & 1 & 1 & \ & \ &\  & \ & \ & \ & \\
+\ & \ & \ & \ & \ & \textbf{|} & $\leftarrow$ & \tiny {\textbf{ext.}} & \ & \ & \ & \ & \ & \ & \ & \ & \ & \ & \ & \ & \tiny{\textbf{ext.}} & $\rightarrow$ &\textbf{|}  & \ & \ & \ & \\
+\\
+\end{tabular} \\
+}
+\caption[An example of the hit-and-extend algorithm in BLAST]{An example of the hit-and-extend algorithm in BLAST. A hit (red region) is identified first and then extended (blue region) to form a longer local alignment.  \label{fig_BLAST}}
 \end{center}
 \end{figure}
-%We illustrate this using a simple house price predictor as an example shown in Fig. \ref{fig_house_price}. Assume size, number of bedrooms, zip code, and wealth are the four factors to determine the house price. Traditional method need to hard code the mathematical relationship between the four inputs and the final predicting price y. For example, a linear function with a weight $\theta$ to each factor $x_i$. Written in vector notation is $y=\theta^Tx$. $\theta$ in this case is handcrafted. In contrast, deep learning methods define the computation flow (edges) between each value (nodes). The actual computation is learned by seeing sample data, for example 100 known house price and their four attributes. 
-% \begin{figure}[!h]
-% \begin{center}
-% \includegraphics[width = 9cm]{img/house_price.png}
-% \caption{Example of predicting house price using computational methods. The x1 - x4 indicate the four factors in determine the house price. Circles indicate computations and edges indicate data flows in the computations. \label{fig_house_price}}
-% \end{center}
+
+To reduce the time complexity, fast identification hits is usually implemented by indexing sequences in data structures like hash table, suffix array, or a suffix tree. Details of the SPRINT indexing implementation will be discussed in Section \ref{sec_detect_simi}. 
+
+The sensitivity of a seed is defined by its probability of finding similarities. The length of the consecutive seed in BLAST determines the sensitivity and the speed of the program. In order to detecting more hits, i.e. higher sensitivity, shorter seeds are needed, but shorter seeds also means higher time complexity.
+
+\subsubsection{Spaced seeds}
+PatternHunter proposed \cite{Ma02_PatternHunter} the idea of spaced-seed. Denote the five consecutive matches of a BLAST seed by 11111; this is called a consecutive seed of weight five. Spaced  seeds consists of matches interspersed by "don’t care" positions. Matches positions are denoted by 1, and "don't care" positions are denoted by *, sometimes by 0. here is an example of such a spaced seed of weight 11 and length 18: 111*1**1*1**11*111. A spaced match requires only the letters in positions corresponding to 1’s in the seed to match. Figure \ref{fig_hit_spaced_seed} shows an example of a hit using the spaced-seed. The match positions requires identical characters in two sequences while the "don't care" positions do not.
+
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[height =3.5 cm]{img/spaced_seed_hit.png}
+\caption[A hit of a spaced-seed]{A hit of a spaced-seed. 1's in the seed require a match in the two target sequences (blue), but the * positions do not care whether the corresponding positions in the two sequences match or not.  \label{fig_hit_spaced_seed}}
+\end{center}
+\end{figure}
+
+A spaced-seed is more sensitive than a consecutive seed of the same weight while maintaining the same time complexity. For random sequences $S$ and $T$ with lengths $m$ and $n$, the expected number of hits for weight $w$, length $l$ seed is $(m-l+1)(n-l+1)4^{-w}$. Usually $l$ is much shorter than $m$ and $n$, this value is approximately $4^{-w}mn$. In other words, the expected number of hits in random regions only depends on the weight of the seed, but not the shape of the seed. Therefore, two seeds, one consecutive and one spaced, of the same weight have the same number of expected hits. That is the reason that time complexity does not change when adding "don't" care positions in the seed.
+
+Spaced-seeds outperform consecutive seeds in sensitivity because they avoid hit clustering. As shown in Figure \ref{seeds}, after having a hit, the consecutive seed requires only one additional match when shifting one position to the right. This way, a long similarity region will be hit many times. In contrast, the spaced seed requires six matching characters when shifting one position. As stated above, the total number of hits using two seeds of the same weight is the same, spaced seeds have their hits much better distributed.  Because the hits of a spaced seed are less clustered together, more regions will be hit, thus increasing the probability of finding similarities. As shown in Fig. \ref{fig_seed_sens}, a spaced-seed of weight 11 is more sensitive than a BLAST seed with weight 11. It  is even higher than a BLAST seed with weight 10.
+\begin{figure}[h!]
+\begin{center}
+\setlength{\tabcolsep}{2pt}
+\ttfamily{
+\begin{tabular}{ccccccccccccccccccccccccccccccccccccccc}
+\textcolor{red}{C} & \textcolor{red}{G} & \textcolor{red}{T} & \textcolor{red}{C} & \textcolor{red}{A} & \textcolor{red}{A} & \textcolor{red}{G} & \textcolor{red}{A} & \textcolor{red}{C} & \textcolor{red}{T} & \textcolor{red}{T} & ? & \ & \ & \ & \ & \ &  \ & \ &\textcolor{red}{G} & \textcolor{red}{A} & \textcolor{red}{G} & ? & \textcolor{red}{C} & ? &? &  \textcolor{red}{T} & ? & \textcolor{red}{G} & ? & ? & \textcolor{red}{A} & \textcolor{red}{C} & ? & \textcolor{red}{T} & \textcolor{red}{T} & \textcolor{red}{C} & ? & \\
+\textcolor{red}{|} & \textcolor{red}{|} & \textcolor{red}{|} & \textcolor{red}{|} & \textcolor{red}{|} & \textcolor{red}{|} & \textcolor{red}{|} & \textcolor{red}{|} & \textcolor{red}{|} & \textcolor{red}{|} & \textcolor{red}{|} & ? & \ & \ & \ &  \ & \ & \ & \ &\textcolor{red}{|} & \textcolor{red}{|} & \textcolor{red}{|} & ? & \textcolor{red}{|} & ? &? &  \textcolor{red}{|} & ? & \textcolor{red}{|} & ? & ? & \textcolor{red}{|} & \textcolor{red}{|} & ? & \textcolor{red}{|} & \textcolor{red}{|} & \textcolor{red}{|} & ? &\\
+\textcolor{red}{C} & \textcolor{red}{G} & \textcolor{red}{T} & \textcolor{red}{C} & \textcolor{red}{A} & \textcolor{red}{A} & \textcolor{red}{G} & \textcolor{red}{A} & \textcolor{red}{C} & \textcolor{red}{T} & \textcolor{red}{T} & ? & \ & \ & \ & \ & \ & \ & \ & \textcolor{red}{G} & \textcolor{red}{A} & \textcolor{red}{G} & ? & \textcolor{red}{C} & ? &? &  \textcolor{red}{T} & ? & \textcolor{red}{G} & ? & ? & \textcolor{red}{A} & \textcolor{red}{C} & ? & \textcolor{red}{T} & \textcolor{red}{T} & \textcolor{red}{C} & ? &\\
+1 & 1 & 1 & 1 & 1 & 1 & 1 & 1 & 1 & 1 & 1 & \ & \ & \ & \ & \ & \ &  \ & \ &1 & 1 & 1 & * & 1 & * &* &  1 & * & 1 & * & * & 1 & 1 & * & 1 & 1 & 1 & \\
+\ &1 & 1 & 1 & 1 & 1 & 1 & 1 & 1 & 1 & 1 & \textcolor{red}{1} &  \ & \ &\ & \ & \ & \ & \ & \ & 1 & 1 & \textcolor{red}{1} & * & \textcolor{red}{1} & * &* &  \textcolor{red}{1} & * & \textcolor{red}{1} & * & * & 1 & \textcolor{red}{1} & * & 1 & 1 & \textcolor{red}{1} &\\
+\end{tabular} \\
+}
+\caption[Consecutive seed and spaced seed]{Consecutive seed (left) and spaced seed (right). The red 1's are new matches required for a hit at the next position; it is much easier for the consecutive seed to have consecutive hits, hence its hits are more clustered  than those of the spaced seed.}
+\label{seeds}
+\end{center}
+\end{figure}
+
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[ height= 7cm]{img/seed_sens.png}
+\caption[The sensitivity comparison of three spaced-seed and BLAST seed]{The sensitivity comparison of three spaced-seed and BLAST seed. (From \cite{Ma02_PatternHunter}).    \label{fig_seed_sens}}
+\end{center}
+\end{figure}
+
+\subsubsection{Multiple spaced seeds \label{sec_multiple_spaced_seed}}
+Different spaced-seeds detect different homologies. PatternHunterII \cite{Li04_PatternHunterII} proposed the idea of combining multiple spaced-seeds to detect more similarities. A sensitivities comparison is shown in Figure \ref{fig_multi_spaced_seed}. The x-axis, similarity, denotes the percentage of identities in the homology region, and the y-axis, sensitivity, is the probability of having a hit, in the given region. The first observation is that the increment of the seed number improves the sensitivity. It is also notable that typically, doubling the number of seeds gains better sensitivity than decreasing the weight by 1.
+\begin{figure}
+\begin{center}
+\includegraphics[ height= 7cm]{img/multi_spaced_seeds.png}
+\caption[The sensitivity comparison on multiple spaced-seed]{The sensitivity comparison on multiple spaced-seed.  From low to high, the solid curves are the sensitivity of multiple spaced seed of weight 11. Denote the number of seeds as $k$, here $k=1,2,4,8,16$. 
+The dashed curves are the sensitivity of single optimal spaced-seed of weight 10, 9, 8, 7. (From \cite{Li04_PatternHunterII}).    \label{fig_multi_spaced_seed}}
+\end{center}
+\end{figure}
+
+Because of the advantage in sensitivity, SPRINT adopts the multiple spaced-seeds. The next natural step is to pick the shape of the seeds. Computing optimal seeds is a hard problem. Even the heuristic algorithms are exponential, except for SpEED \cite{ilie2007multiple, ilie2011speed}. We have thus used SpEED to compute the multiple spaced seeds to be used in our PPI prediction program. 
+
+\subsubsection{Substitution matrix}
+In bioinformatics and evolutionary biology, a substitution matrix describes the rate at which one character in a sequence changes to other character states over time. The similarity between sequences depends on their divergence time and the substitution rates as represented in the matrix. Substitution metrics like PAM and BLOSUM are often used as similarity measurement for protein sequences \cite{eddy2004_BLOSUM_PAM}, and thus they are sometimes called similarity matrices. An example, the BLOSUM62 matrix is shown in Figure \ref{fig_BLOSUM62}.
+
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[ height= 7cm]{img/BLOSUM62.png}
+\caption[The BLOSUM62 matrix]{An example of substitution matrix, the BLOSUM62 matrix. BLOSUM 62 is a matrix calculated from comparisons of sequences with a pairwise identity of no more than 62\%. From \text{en.wikipedia.org/wiki/BLOSUM}    \label{fig_BLOSUM62}}
+\end{center}
+\end{figure}
+
+\subsubsection{Interactome prediction}
+The PPI prediction problem, interactome prediction means to score every pair in a proteome of an organism. Denote the total number of protein sequences in an organism as $P$, its interactome has $(1+P)\times P\div 2$ interactions. This is a relatively big number for advanced organisms. For instance, human has about 20,000 proteins, and human's interactome has $(1+20000) \times 20000\div 2 = 200,010,000$ interactions to predict. Comparing to the PPI site prediction problem, which only involves the computation on $P$ sequences, the amount of computation is much higher in the PPI prediction problem.
+
+\subsection{Previous Methods}
+As shown in Table \ref{table_experimental_ppi_pred}, various experimental techniques for identifying PPIs have been developed, most notably high throughput procedures such as two-hybrid assay and affinity systems \cite{shoemaker2007deciphering}. 
+\begin{table}[h!]
+\begin{center}
+\includegraphics[ width = 16cm, height= 7cm]{img/experimental_PPI_identification.png}
+\caption[Experimental methods for PPI identification]{Experimental methods for PPI identification (From \cite{shoemaker2007deciphering}). High-throughput methods are marked with + in the second column. The fourth column shows whether the method on physically interacting proteins in a complex (‘‘complex’’) or only pairwise interactions (‘‘binary’’).   \label{table_experimental_ppi_pred}}
+\end{center}
+\end{table}
+
+The yeast two-hybrid (Y2H) approach was proposed by Suter et al. \cite{fields1989novel}. It detects a protein interaction by telling the signal generated by the DNA-binding domain (DBD) and the activation domain (AD) \cite{suter2008two}. Figure \ref{E_M1} shows the basic procedure of the Y2H approach. To detect whether protein 1 (green) and protein 2 (red) interact or not, then DBD and AD are bound, each to one of the proteins. The DBD and AD will connect together only when protein 1 and protein 2 interact with each other. When DBD and AD connect, a reporter will be generated. Thus, protein 1 and protein 2 are interacting if a reporter is detected, and vice versa \cite{suter2008two}.
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[height =7 cm, width = 9cm]{img/E_M1.jpg}
+\caption[The Y2H approach]{The Y2H approach. To verify is protein 1 and 2 interact, DBD and AD are attached to them. If the two proteins interact, DBD and AD will bond and a reporter will be generated. The interaction is detected if the reporter is detected., From: \cite{suter2008two} \label{E_M1}}
+\end{center}
+\end{figure}
+
+Another widely used experimental approach is tandem affinity purification (TAP), which was invented by Rigaut et al. \cite{rigaut1999generic}. It can detect protein complex interaction by adding a "tag" to target proteins. Figure \ref{E_M2} shows the general process of TAP. If we want to test whether interaction exists between protein $A$ and protein $B$, a tag is added to protein $A$. After tagging, the complex is washed twice to remove the tag and unstable bindings. Isolated interacting proteins can be found if there are some. After washing, the mass spectrometry or other methods will be used to detect remaining proteins. The remaining ones are marked as interacting proteins \cite{rigaut1999generic}.
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[height =9 cm, width = 6cm]{img/E_M2.jpeg}
+\caption[Tandem affinity purification]{Tandem affinity purification. To verify if Protein A and B interact, a tag is linked to Protein A. A is able to bind the matrix in the affinity column. Molecules that bind with Protein A will also remain in the column. The second wash flushes all molecules, and those molecules considered Protein A's interaction parterner. From: \cite{jessulat2011recent} \label{E_M2}}
+\end{center}
+\end{figure}
+
+Experimental methods are time and labor intensive and have a high rate of error. Therefore, a variety of computational methods have been designed to help predicting PPIs, employing sequence homology, gene co-expression, phylogenetic \cite{shoemaker2007deciphering, liu2012proteome, zahiri2013computational}.
+profiles, etc. [3–5].
+
+
+In general, based on the type input, computational methods can be classified into two categories: sequence based and structure based \cite{zhang2018review}. Sequence based methods \cite{ Martin05_PPIpred,Pitre06_PIPE,Shen07_PPIpred,Guo08_PPIpred,yu2010predicting, xia2010predicting,shi2010predicting, guo2010pred_ppi,zhang2011adaptive, liu2012spps, yousef2013novel,zahiri2013ppievo, zahiri2014locfuse, you2015detecting, hamp2015evolutionary, jia2015prediction, huang2015using,   you2015predicting, hamp2015more, ding2016predicting,gao2016ens, huang2016sequence, an2016using,you2017improved, hashemifar2018predicting, chen2019multifaceted, chen2019protein} are faster and more universally applicable because comparing to proteins structures, much more protein sequences are available. Here we introduce several state-of-the-art sequence based PPI prediction methods. One of them is traditional algorithmic, and the rest employs machine learning algorithms.
+
+\subsubsection{PIPE}
+PIPE (Protein Interaction Prediction Engine)\cite{Pitre06_PIPE} is one of the most widely known traditional algorithmic methods. It predicts interactions based on re-occurring short sub-sequences in an existing interaction database. The  four major steps of PIPE are shown in Figure \ref{fig_PIPE}.
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[height =13 cm]{img/PIPE_procedure.png}
+\caption[The algorithm of PIPE]{The algorithm of PIPE. Step 1: building interaction graph from interaction database. Step 2: detecting similar sub-sequences for input $A$. Step 3: detecting similar sub-sequences for input $B$ and build the result matrix for ($A, B$). Step 4: outputing the result based on the result matrix. (From: \cite{Pitre06_PIPE} ) \label{fig_PIPE}}
+\end{center}
+\end{figure}
+The input is a protein pair ($A$, $B$), and the output is the probability of $A$ and $B$ interact. It first puts a 20-sized window $w$ on top of $A$, then compares $w$ with every 20-sized piece in the protein sequence database. PIPE compares the similarity between two 20-sized pieces using PAM120 matrix. If the score between the two pieces are higher than a threshold (default: 35), they are considered as similar pieces. All proteins that contain similar piece with protein $A$, will be stored in a set $R$. 
+
+Based on the interaction database, all proteins that interact with the proteins in $R$, are denoted as Neighbors ($R$). PIPE will then put a 20-sized window $w$ on protein $B$. It compares every piece in $B$ with every 20-sized piece in Neighbors($R$).
+
+A result matrix $M$ is used to denote the score of the query ($A$, $B$). The size of the matrix is length of $A$ times length of $B$. For example, protein $A$ is similar with $C$ at position $i$, and protein $B$ is similar with $D$ at position $j$. We also know that $C$ and $D$ interact from the database, then we will increase the score of $M$($i$, $j$) by one.
+
+In the end, the height of the highest peak in the matrix is the score for query ($A$, $B$). If the score is higher than a set threshold, PIPE will claim $A$ and $B$ interact.
+
+The pseudocode of PIPE is shown in Figure \ref{fig_pseudocode_pipe}. The time complexity of this algorithm is $O(P^3L^2)$ where $P$ is the number of proteins and $L$ is the average protein length. If the human interactome prediction (20117 proteins with average length 557) needs to be performed using a computer that does $10^9$ operations per second, the theoretical estimated running time for PIPE is $(20117^3*557^2)/10^9$s $\approx 80 $ years.  
+
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[width =17cm]{img/psedo_code_pipe.png}
+\caption[The pseudocode of PIPE]{The pseudocode of PIPE.  \label{fig_pseudocode_pipe}}
+\end{center}
+\end{figure} 
+
+The second version of PIPE, PIPE2 \cite{Pitre08_PIPE2}, increased both the speed and the accuracy from the previous version. 
+
+For speed, instead of computing all similar pieces "on the fly", PIPE2 pre-computes all similar pieces for all protein sequences and stores them locally. PIPE2's pseudocode is shown in Figure \ref{fig_pseudocode_pipe2}. All pieces that are similar with $a$ and $b$ have been pre-computed so that the program does not waste time on computing the same re-occurring piece repeatedly. The time complexity of PIPE2, ignoring the pre-computating part, is improved to $O(P^2L^2R)$ where the size of $R$ is uncertain. After running PIPE2 for more than 80 hours, we estimated its running time on the entire human interactome prediction to be 1520 days.   
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[width =15cm]{img/PIPE2_psedu.png}
+\caption[The pseudocode of PIPE2]{The pseudocode of PIPE2.  \label{fig_pseudocode_pipe2}}
+\end{center}
+\end{figure} 
+
+In terms of accuracy improvement, PIPE2 applies a binary filter which works as shown in Figure \ref{fig_binary_filter}. The binary filter flattens the matrix by checking the surrounding areas. For each cell containing the value $c$, if the surrounding eight cells have more non-zero values than zero values, then it replaces $c$ with 1, otherwise it replaces $c$ with 0. For example, the middle cell 34, has three non-zero values and five zero-values around it, so the filter replaces 34 with 0.
+
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[height = 4 cm]{img/binary_filter.png}
+\caption[The binary filter of PIPE2]{The binary filter of PIPE2. The centered number is replaced with 1 if there are more non-zero values than zero values in the surrounding eight cells, with 0 otherwise.  \label{fig_binary_filter}}
+\end{center}
+\end{figure} 
+
+PIPE's third version \cite{schoenrock2011mp}, PIPE3, parallels PIPE2. The algorithm is still slow, but it was the first program able to predict the entire human interactome. It took over 3 months to run the entire human proteome on 50 nodes with 12,800 parallel computational threads.
+
+\subsubsection{Martin's program}
+Martin \cite{Martin05_PPIpred} is one of the earliest PPI perdition methods that use machine learning. It is highly cited and still considered one of the most effective ones. The workflow of Martin is shown in Figure \ref{fig_Martin}. The core idea of this method is using Support Vector Machine (SVM) \cite{hearst1998support} to classify PPIs. The inputs to the SVM is the encoding of two protein sequences. Encoding protein sequences were not a well studied problem at that time, and their solution was to use signature molecular descriptor \cite{visco2002developing, faulon2003signature1, faulon2003signature2}. The signature of a sequence $A$ is defined as $s(A) = \sigma_iz_i$ where $z_i$ is the all trimers of amino acids and $\sigma_i$ is the number of occurrences of trimer $z_i$. Each trimer put the centered residue at front and the two neighboring residues afterwards. For example, the signature of the sequence $LVMTTM$ is denoted as $s(LVMTTM) = V(LM)+M(TV)+2T(MT)$. The two signatures are further converted into two tensors and then computed the tensor product.
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[height =7 cm]{img/sigProd.png}
+\caption[The workflow of Martin]{The workflow of Martin. Two input protein sequences are encoded into signatures. The dot product of the two signatures are then computed. SVM is used to classify the dot product into interaction and non-interaction.  \label{fig_Martin}}
+\end{center}
+\end{figure} 
+
+\subsubsection{Shen's program}
+Shen's program \cite{Shen07_PPIpred} followed the idea of using SVM to classify PPIs. Instead of using the signature to represent protein sequences, ectrostatic (including hydrogen bonding) and hydrophobic information are used.
+\subsubsection{Guo's program}
+Guo's program \cite{guo2010pred_ppi} further followed the idea of using SVM by incorporating more features and auto covariance. The new features include interaction modes (electrostatic interaction, hydrophobic interaction, steric interaction and hydrogen bond), physicochemical properties. Auto cross covariance (ACC) was used to transform unequal sized feature vectors into uniform matrices. 
+
+\subsubsection{Ding's program}
+Ding et al. \cite{ding2016predicting} published a program utilizing random forest classifier for PPI prediction. The flowchart of the program is shown in Figure \ref{fig_Ding}. The protein sequences are encoded into a 638-D matrix consisting k-gram embedding and electrostatic and hydrophobic properties.
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[height =7 cm]{img/Ding.png}
+\caption[The workflow of Ding's program]{The workflow of Ding's program. The two input protein sequences are represented using a vector of dimension 638, consisting k-gram embedding and electrostatic and hydrophobic properties. The classifier is random forest. \label{fig_Ding}}
+\end{center}
+\end{figure} 
+\subsubsection{DPPI}
+DPPI \cite{hashemifar2018predicting} is a recent PPI prediction program using deep learning. It employs a Siamese-like network structure which learns from two proteins. The input sequences are firstly represented using PSSMs, then both matrices are passed to convolutional layers. Then a random projection module is applied to reduce the dimension of the tensor as well as to improve the prediction performance. In the end a linear layer outputs the prediction result.
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[height =6 cm, width = 17cm]{img/DPPI.png}
+\caption[The architecture of DPPI]{The architecture of DPPI. The sequences are encoded using PSSMs, passed into convolutional random projection, and linear layers. From \cite{hashemifar2018predicting} \label{fig_DPPI}}
+\end{center}
+\end{figure} 
+\subsubsection{PIPR}
+PIPR \cite{chen2019multifaceted} is one of the most recent PPI predictors. Similar to DPPI, it also employees a Siamese-like network using deep learning algorithms. As shown in Figure \ref{fig_PIPR}, two protein sequences are represented using embedding. The embedding contains two parts: Skip-Gram \cite{mikolov2013distributed} based embedding and electrostaticity and hydrophobicity characteristics. The embedding is then passed to residual RCNN network. The residual CRNN consists convolutional and bidirectional GRU layer. The GRU layer has shortcut connection between the input and the output. The outputs of the RCNN unit is put together using element-wise multiplication, and then the product is passed to fully-connected layers for prediction. 
+
+\begin{figure}[h!]
+\centering
+\begin{subfigure}[b]{\textwidth}
+   \includegraphics[width = 17cm]{img/PIPR_archi.png}
+   \caption{}
+   \label{fig_Ng1} 
+\end{subfigure}
+
+\begin{subfigure}[b]{\textwidth}
+   \includegraphics[width = 17cm]{img/PIPR.png}
+   \caption{}
+   \label{fig_PIPR}
+\end{subfigure}
+
+\caption[The architecture of PIPR]{(a) The overall architecture of PIPR. The flowchart consists input sequences, embedding, residual RCNN, element-wise multiplication, multi-layer perceptron. (b) The details of the RCNN unit. The RCNN combines a CNN and a RNN components. The RNN part is bidirectional GRU layer with residual shortcuts that bridge the input and the output of the GRU layer.}
+\end{figure}
+
+\section{Methods and Materials}
+We describe in this section both the algorithm and the implementation of SPRINT in details.
+\subsection{Basic idea}
+Proteins similar with interacting proteins are likely to interact as well. That is, if $P_1$ is known to interact with $P_2$ and the sequences of $P_1$ and $P'_1$ are highly similar and the sequences of $P_2$ and $P'_2$ are highly similar, then $P'_1$ and $P'_2$ are likely to interact as well. In a way or another, this is essentially the idea behind the brute force calculation of PIPE as well as the machine learning algorithms of Martin, Shen, and Guo. 
+
+SPRINT uses a complex algorithm to quickly evaluate the contribution of similar subsequences to the likelihood of interaction. SPRINT has two main steps: computing HSP and predicting interactions. 
+
+High-scoring segment pairs (HSPs) are similar subsequences among all input sequences. SPRINT first detects these HSPs from the input protein sequences. Figure \ref{fig_compute_hsp} is the visualization of the process. Four proteins, P1 to P4, are input to the Compute HSPs program. After computation, three HSP pairs are found, that is  subsequences A1, B1, C1 are similar to A2, B2, C2 respectively.  
+
+\begin{figure}
+  \includegraphics[width=0.95\textwidth]{img/compute_hsp}
+\caption[The idea of computing HSPs]{The idea of computing HSPs. P1 - P4 represent four protein sequences. (A1, A2), (B1, B2), (C1, C2) represent three pairs of HSPs. Blocks with the same colour indicate a pair of HSP.}
+\label{fig_compute_hsp}  
+\end{figure}
+
+After computing the HSPs, SPRINT takes in both the similarities and known PPIs as inputs and predict interactions. The idea of predicting interactions in SPRINT is shown in Figure \ref{fig_predict_PPI}. A, B, and C are HSP segments, and P1-3 and Q1-3 are proteins. Known PPIs (P1, Q1) and (P2, Q2) are fed to SPRINT along with the HSPs they contain. SPRINT assumes that in an known interaction, all HSPs are possible binding sites that cause the interaction. For example, (A, B) and (A, C) are assumed to be the binding sites in the interactions (P1, Q1) and (P2, Q2) repetitively, and they are expected to behave the same in an novel interaction (P3, Q3). Thus, the interaction score of (P3, Q3) is increased based on the possible biding between (A, B) and (A, C). The higher the score, the more confidently SPRINT claims the interaction. 
+
+\begin{figure}
+  \includegraphics[width=0.95\textwidth]{img/predict_PPI.png}
+\caption[The idea of predicting PPIs]{The idea of predicting PPIs. A, B, C are HSPs. The blocks with the same colour indicate HSP pairs. (P1, Q1) and (P2, Q2) are known interactions. The interaction score of (P3, Q3) is calculated.}
+\label{fig_predict_PPI}  
+\end{figure}
+
+% \begin{figure}[h!]
+% \centering
+% \includegraphics[width=8cm]{img/fig_idea.pdf}
+% \caption[Interaction inference]{Interaction inference. The proteins $P_1$ and $Q_1$ are known to interact; blocks of the same colour represent occurrences of similar subsequences. Dashed lines indicate potential contributions to interactions: there are six between $P_1$ and $Q_1$ and they imply two between $P_2$ and $Q_2$ and three between $P_3$ and $Q_3$. \label{fig_idea}}
 % \end{figure}
 
-Many bioinformatics problems have been transformed into well defined mathematical problems. For example, sequence alignment, tree comparison, similarity search etc.These problems often have good algorithmic solutions. However, there are also large amount of bioinformatics problems are far from understanding, and many of them are fundamental problems such as coding region identification, structure prediction, interaction identification, biomedical image classification \cite{larranaga2006machine}. The biggest obstacle of solving these problems are the underlying mechanism is biologically complicated so that even biologists can not give definitive explanation of the factors and how they are related. 
+Long similar regions should have a higher weight than short ones. To account for this we assume that all contributing blocks have a fixed length $k$ %(default $k = 20$) 
+and that a region of length $\ell$ contributes $\ell-k+1$ blocks. As $k$ is fixed, this grows linearly with $\ell$. The precise score is given later in this section.
 
-With the increasing amount of biological data, more and more hard biological problems have been attempted to solve using deep learning methods. As shown in Fig. \ref{fig_deelLearning_papers}, since early 2010s, the number of deep learning bioinformatics methods has increased drastically. This is due to several reasons. First, significant amounts of biomedical data have been accumulated which enables significant performance improvement deep learning methods. For example, as shown in Fig. \ref{fig_pdb_stats}, from year 2000 to 2020 April, The total number of PDB \cite{berman2002protein} released structures increased from 13,589 to 162,529, which is almost 12 times bigger as two decades ago. As shown in Fig. \ref{fig_data_performance}, the performance of deep learning methods generally increases with more data while traditional methods reach its maximum performance after being fed with certain amount of data. Second, great amount of efforts have been made in deep learning software hardware co-design to accelerate the deep learning process especially for accelerating training. On the software side, numerous deep learning frameworks and compilers have been released and well maintained. Many of them of opensource programs with tight community integration. Popular frameworks include Google's Tensorflow \cite{tensorflow2015-whitepaper}, PyTorch \cite{NEURIPS2019_9015}, Caffe \cite{jia2014caffe}, high level API libraries like Keras \cite{chollet2015keras}, and recently opensourced MindSpore \cite{liao2019davinci} from Huawei. Compiler optimizations have also been explored greatly. For instance, Google's MLIR \cite{lattner2020mlir} project aims to unify the deep learning intermediate representation so that frontend APIs and the hardware can integrate more smoothly. The TVM \cite{chen2018tvm} project aims to automate the kernel implementation on various hardware.  These software makes deep learning easy to use and efficient during runtime. On the hardware side, general purpose CPU was initially used for deep learning computation. Soon GPU became very popular because of its vector computation unit that greatly accelerates the vector computations in deep learning. Recent years, specialized hardware focusing on the cube unit have also been developed by major companies. Cube unit performs matrix multiply in a single cycle which further accelerates deep learning computations. Well known examples include Google's Tensor Processing Unit (TPU), chips produced by Habana Lab (acuired by Intel), and Huawei's Ascend chips etc. As shown in Fig. \ref{fig_hardware_speedup}, the full setup of TPU could potentially speedup 200 times of the training on Resnet50. Third, biological problems are often too complicated for hand-crafted algorithms. Deep learning on the other hand can takes advantage of the growing number of data and captures the underlying patterns buried in high dimentionla data that human cannot.  Fourth, the influence of events and completions has attracted many researchers into the field of AI. To name a few, in ImageNet Large Scale Visual Recognition Challenge in 2012, AlexNet \cite{krizhevsky2012imagenet} ranked the first place and surpassed the second place by a huge 10.8\% margin. In October 2015, AlphaGo \cite{silver2017mastering} beat the professional Go player Lee Sedol on a full-sized board. Deepmind’s AlphaFold \cite{senior2020improved} won CASP13 protein-folding competition in 2018. 
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[width = 9cm]{img/deepLearning_in_bioinfo.png}
-\caption{Approximate number of published deep learning and deep learning bioinformatics papers by year. From \cite{min2017deep}.  \label{fig_deelLearning_papers}}
-\end{center}
-\end{figure}
-
-\begin{figure}[!h]
-\begin{center}
-\includegraphics[height = 6cm, width = 9cm]{img/pdb_stats.png}
-\caption{PDB Statistics: Overall Growth of Released Structures Per Year. From rcsb.org \cite{berman2002protein} \label{fig_pdb_stats}}
-\end{center}
-\end{figure}
-
-\begin{figure}[!h]
-\begin{center}
-\includegraphics[height = 7cm, width = 9cm]{img/data_deeplearning.png}
-\caption{Learning performance with the increament of data . From deepai.org/  \label{fig_data_performance}}
-\end{center}
-\end{figure}
+We put together the workflow of SPRINT in Figure \ref{fig_SPRINT_workflow}, The details of each step are given in the following sections.
 
 \begin{figure}[h!]
-\begin{center}
-\includegraphics[height = 6cm, width = 13cm]{img/hardware_speedup.png}
-\caption{Google's TPU speedup on Resnet50 training. From cloud.google.com/tpu \label{fig_hardware_speedup}}
-\end{center}
-\end{figure}
-
-In the area of PPI prediction and PPI binding site prediction, most of methods published within a past decade are machine learning based. Seeing the trend, we designed and implemented our program DELPHI using deep learning techniques as well.
-
-\subsection{Basic Notions and Definitions}
-\subsubsection{Deep neural networks}
-Neural networks learn complex mathematical transformations using layers of neurons. Fig. \ref{fig_mlp} shows the classic structure of a multilayer perceptron (MLP). It consists of at least three layers. The input layer, the output layer, and the hidden layers. The input layer is the initial state of the data. In bioinformatics, often raw data such as DNA or protein sequences is converted to features representations like embedding or position-specific scoring matrix (PSSM). Sequence itself contains useful but often limited information and needs to be represented further using features. The input layer is then passed to hidden layers for further computation. The term “deep learning” comes from the fact that the number of the hidden layers is big.
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[width = 13cm]{img/multiplayer_perceptron.png}
-\caption{Multilayer perceptron (MLP). An MLP must have at least three layers: the input layer, a hidden layer and the output layer. From medium.com \label{fig_mlp}}
-\end{center}
-\end{figure}
-
-The term neuron, or often referred to as perceptron, means a mathematical function. As shown in Fig. \ref{fig_neuron}, a neuron takes in one or more inputs and apply mathematical functions on them and obtain an output called hypothesis. Each input is multiplied by a weight with the intuition of weighing the importance of each input.
-% one or more inputs are multiplied by values called weights and then combined together with a bias value to better fit the model. Simple models often Linear Regression and Logistic Regression. Linear regression is a linear function while logistic regression is non linear.
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[height = 6cm, width = 7cm]{img/neuron.png}
-\caption{A neuron in deep learning networks. $x_1$ - $x_3$ are inputs. $b$ is the bias value. $w_1$ - $w_3$ are the weights. $Z$ is the value before applying activation functions. $a$ is the final output value.\label{fig_neuron}}
-\end{center}
-\end{figure}
-% For inputs $x1, x2 ... xi$, the vector notation for Linear Regression and Logistic Regression are \ref{equ_linear_regression} and \ref{equ_logistic_regression} respectively where $h_\theta(x)$ are the output, also known as hypothesis, $\theta^T$ is the weights and b is the bias. 
-% \begin{equation}
-% h_\theta(x)=\theta^Tx + b \label{equ_linear_regression}
-% \end{equation}
-
-% \begin{equation}
-% h_\theta(x)=\frac{1}{1+e^{-\theta^Tx}} \label{equ_logistic_regression}
-% \end{equation}
-After calculating the hypothesis, an non-linear function is often applied to it, and this is called an activation function. The intuition of the the term "activation" is that each neuron calculates the hypothesis of inputs and if the result is greater than a threshold, then the neuron activates and send a signal to the next neuron. Popular activation function include Sigmoid, tanh, ReLU, LeakyReLU, Maxout, ELU \cite{goodfellow2016deep}. Their function and plots are shown in Fig. \ref{fig_activation_func}.
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[width = 13cm]{img/activation_function.png}
-\caption{Popular activation functions and their plots.\label{fig_activation_func}}
-\end{center}
-\end{figure}
-
-\subsubsection{Training}
-The output of a network may not be able to predict the true vale of a sample. The weights in network need to be tuned to achieve better prediction. This process is called training a neuron network.
-
-First, we need to measure how well the current network is doing by having calculating the the difference, or cost, between the current predicted value and the true value of the output. This is done by having a loss function. A commonly used loss function for is least square which is shown in Equation \ref{equ_least_square} in vector notation, where $J(\theta)$ is the cost, $h_\theta(x^{(j)})$ is the predicted value or the hypothesis, $y^{(j)}$ is the ground truth, and $m$ is the number of samples. Other popular loss functions include mean squared error, cross-entropy, hellinger distance, logcosh etc \cite{goodfellow2016deep}.
-\begin{equation}
-J(\theta)=\frac{1}{2}\sum^m_{j=1}(h_\theta(x^{(j)}) - y^{(j)})^2
- \label{equ_least_square}
-\end{equation}
-
-The training process aims to minimize the loss function. The weights will be adjusted gradually. The most popular algorithm for this is gradient descent. As shown in Fig. \ref{fig_gradient_descent}, the initial value of the weight $w$ is the left-most blue circle. The yellow point on the plot is the best choice of the weight because it renders the minimal loss. Denoting in vector representation, given an initial guess for the weights $\theta$, the weights are updated such that the cost moves in the direction of steepest descent \cite{robbins1951stochastic}. The updated weights $\theta_j$ are computed as in Equation \ref{equ_gradient_descent}.
-\begin{equation}
-\theta_j=\theta_j - \alpha\frac{\partial}{\partial\theta_j}J(\theta)
- \label{equ_gradient_descent}
-\end{equation}
-
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[width = 11cm]{img/gradient_descent.jpg}
-\caption{The illustration of gradient descent. The x-axis is the value of the weight, and the y-axis is the corresponding cost. The aim is to choose a $w$ that minimizes the cost. \label{fig_gradient_descent}}
-\end{center}
-\end{figure}
-
-In Keras, training can be done using the Model Class API as follows.
-\begin{lstlisting}[language=python,frame=single]
-model.fit(x = input_data, y = labels, epochs=10, ...)
-\end{lstlisting}
-
-\subsubsection{Inference}
-After training the network, all the weights are fixed and the network is ready to predict on new data. This predicting process is called inference. Fig. \ref{fig_train_vs_infer} illustrates the process of the training and inference process of a neuron network. Performing inference on a network is significantly faster than training that network.
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[width = 13cm]{img/train_inference.jpg}
-\caption{The illustration of training and inference processes. \label{fig_train_vs_infer}}
-\end{center}
-\end{figure}
-
-In Keras, inference can be done using the Model Class API as follows.
-\begin{lstlisting}[language=python,frame=single]
-model.predict(x = input_data, ...)
-\end{lstlisting}
-
-\subsubsection{Convolutional Neural Networks}
-One of the shiniest algorithms in deep learning is Convolutional Neural Network (CNN). In recent decades, it has led the major advancements in the field of computer vision, image and video classification, media recreation, and recommendation systems. CNN is the core layer of many state-of-the-art deep learning networks such as AlexNet (2012) \cite{krizhevsky2012imagenet}, ZFNet (2013) \cite{zeiler2014visualizing}, GoogLeNet/InceptionV1 (2014) \cite{szegedy2015going}, VGGNet (2014) \cite{simonyan2014very}, ResNet50 (2015) \cite{he2016deep}, Xception (2016) \cite{chollet2017xception}, ResNeXt-50 (2017) \cite{xie2017aggregated} and many of their variants. The basic building blocks of a CNN are convolutional layers, pooling layers, and fully connected layers, as shown in Fig. \ref{fig_CNN}. 
-
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[width = 13cm]{img/convlution.png}
-\caption{The basic building blocks of a Convolutional Neural Network: convolutional layers, pooling layers, and fully connected layers. From superdatascience.com \label{fig_CNN}}
-\end{center}
-\end{figure}
-
-The computation of a convolution applied on a 2D image is as follows. As shown in Fig. \ref{fig_Conv2d}, the input is an image, often called a feature map, which is represented as a 2D matrix $I$. A sliding window, in this example of size 3x3 is placed on top and shifted through the entire image. Elementwise multiplication is conducted on each sub-matrix and another matrix called filter or kernel, denoted as $K$. The summation of the elementwise multiplication is placed as one value in the output matrix $I*K$. The values in the kernel matrix is learned during training. The intuition of the convolution operation is to extract the higher level features such as edges, from the input image. A CNN is not limited to one layer of convolution operation. Each convolution layer is meant to extract more abstract information from its previous input.
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[width = 13cm]{img/convolution_computation.png}
-\caption{The computation inside a convolution operation. A sliding window is applied on the input image $i$. Each window multiplies the kernel matrix $K$ elementwise. The summation of the product is placed as one value in the output matrix. For example, the summation of the elementwise multiplication between a sub-matrix (red) and the kernel matrix (blue) is 4 (green). This computation is $1*1+0*0+0*1+1*0+1*1+0*0+1*1+1*0+1*1 = 4$.   \label{fig_Conv2d}}
-\end{center}
-\end{figure}
-
-The convolution layer can be implemented in Keras in either 1D or 2D depending on the shape of the input tensor.
-\begin{lstlisting}[language=python,frame=single]
-keras.layers.Conv2D(filters, kernel_size, ...)
-\end{lstlisting}
-
-The convolution layer is often followed by a pooling layer. The Pooling layer is responsible for reducing the size of the extracted features from the previous convolution operation. As shown in Fig. \ref{fig_pooling}, there are two popular types of pooling operations: max pooling and average pooling. Max Pooling returns the maximum value from the portion of the input, and average pooling returns the average value. In most applications, max pooling has a better performance than average pooling. One interpretation is that the max pooling operation performs noise suppressant by discarding all noisy values while average pooling retaining them.
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[width = 13cm]{img/pooling.png}
-\caption{Examples of the pooling operation. The input matrix is divided into four sub-matrces, and each of them is performed a pooling operation. For example, the purple sub-matrix has four values 4, 9, 5, 6. Max pooling computes their max value, which is 9, and the average pooling computes the average, whcih is 6. From towardsdatascience.com \label{fig_pooling}}
-\end{center}
-\end{figure}
-
-The intuition behind pooling layers is that the reduced image still contains the dominant features that are adequate to represent the original image. As shown in Fig. \ref{fig_pooling_blurry}, the image after the maxpooling operation (right) is reduced in size comparing to its input image (left), but it is still clear that the image content is a car. 
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[width = 13cm]{img/pooling_blurry.png}
-\caption{The intuition of the pooling operation. The original image after a convolution operation is on the left, and the image after the max pooling operation is on the right. From analyticsvidhya.com \label{fig_pooling_blurry}}
-\end{center}
-\end{figure}
-
-In Keras, pooling layers can be implemented using the layers API.
-\begin{lstlisting}[language=python,frame=single]
-# Max Pooling
-keras.layers.MaxPooling2D(pool_size=(2, 2), ...)
-# Average Pooling
-keras.layers.AveragePooling2D(pool_size=(2, 2), ...)
-\end{lstlisting}
-
-The last layer(s) of a CNN is usually fully connected layers. The role of a fully connected layer is to transform the results of the convolution or pooling operations to one or few values. It is called fully connected layers because every neuron is connected to all the neurons in the next layer. As shown in Fig. \ref{fig_fc}, each node in a fully connected layers is the weighted summation of all its input. The weighs are trained during training. The computation denoted in vector notation is shown in Equation \ref{equ_linear_regression} where $h_\theta(x)$ are is the outputs, $x$ is the inputs, $\theta^T$ is the weights and b is the bias. 
-\begin{equation}
-h_\theta(x)=\theta^Tx + b \label{equ_linear_regression}
-\end{equation}
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[height=7cm, width = 9cm]{img/fully_connected.png}
-\caption{The illustration of fully connected layers. Each neuron is connected to all the neurons in the previous layer. From oreilly.com \label{fig_fc}}
-\end{center}
-\end{figure}
-
-The fully connected layer can be implemented in Keras using the Dense layer API.
-\begin{lstlisting}[language=python,frame=single]
-keras.layers.Dense(units=1, activation='sigmoid', ...)
-\end{lstlisting}
-\subsubsection{Recurrent neural networks}
-Another star of the deep learning algorithms is Recurrent Neural Networks (RNN). Recurrent neural networks are good at modeling sequential data. The input of an RNN is a sequence. Each chunk of the sequence is called a timestep. For example, in Fig. \ref{fig_RNN_timestep}, the network input is the sentence "What time is it". Each word or punctuation in the sentence is fed to a computation unit denoted by a circle. A single occurrence of the unit is called a timestep. RNN allows each hidden state to remember certain information from previous timesteps. The ability of carrying previous information makes RNN good at speech recognition, language translation, stock predictions etc. 
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[width = 9cm]{img/RNN.png}
-\caption{Time steps in a recurrent neural network. The network input is the sentence "What time is it?". Each word is fed to a unit in the RNN network. The occurrence of each unit is called a timestep. From towardsdatascience.com \label{fig_RNN_timestep}}
-\end{center}
-\end{figure}
-
- A single RNN cell is shown in Fig. \ref{fig_RNN}. Notice that the major difference between a RNN layer and a fully connected layer is that there are two inputs in each RNN cell, the input at the $t$th position $x^{<t>}$ and the output of the previous cell $a^{<t-1>}$. This way, the network manages to memories the information from previous sequences. $a^{<t-1>}$ and $x^{<t>}$ are multiply by their weights in the cell, and the weights are learned during training. 
-
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[width = 13cm]{img/basic_rnn.png}
-\caption{A basic RNN cell. The inputs are: output from the previous unit $a^{<t-1>}$ and $t$th input $x^{<t>}$. From stanford.edu. \label{fig_RNN}}
-\end{center}
-\end{figure}
-
-A major concern with the basic RNN is Vanishing Gradient \cite{pascanu2013difficulty} which is also called short term memory problem in RNN. When doing back propagation, each node in a layer calculates its gradient with respect to the effects of the gradients, in the layer before it. The adjustment is smaller and smaller through the chain rule. However, the importance of beginning part of input sequence could be dominant. For example, in the sentence "What time is it?", the words "what time" are very important even though it is at the beginning part of the sentence. Long short-term memory (LSTM) \cite{hochreiter1997long} and Gated Recurrent Unit \cite{cho2014learning} are developed to solve the Vanishing Gradient problem in RNN.
-
-As shown in Fig. \ref{fig_LSTM_GRU}, LSTM and GRU cells are built based on the basic RNN cell. They are computationally more expensive than the basic RNN cell but able to maintain the information from the first time step till the last time step by introducing forget gates, input gates, output gates, cell state, update gates, reset gates. Gates contains an activation function that decides whether to remember or to forget the input value. LSTM and GRU have similar cell structure, and usually researchers empirically determine which one to use for a specific deep learning application.
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[width = 13cm]{img/LSTM_GRU.png}
-\caption{A single LSTM and GRU unit. From towardsdatascience.com \label{fig_LSTM_GRU}}
-\end{center}
-\end{figure}
-
-In Keras, LSTM, GRU can be implemented as follows.
-\begin{lstlisting}[language=python,frame=single]
-# LSTM
-keras.layers.LSTM(units = 32, activation='tanh', ...)
-# GRU
-keras.layers.LSTM(units = 32, activation='tanh', ...)
-\end{lstlisting}
-\subsubsection{Ensemble networks}
-Deep learning neural networks are nonlinear methods. This offers great flexibility in terms of fitting the training data, but a downside of this flexibility is that they are sensitive to the specifics of the training data and may find a set of weights each for a set of training data but does not apply to other data. This problem is called overfitting and often referred to as having a high variance \cite{goodfellow2016deep} as shown in Fig. \ref{fig_over_under_fitting}.
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[width = 13cm]{img/over_under_fiting.png}
-\caption{The illustration of overfitting, underfitting, and good balance. From towardsdatascience.com \label{fig_over_under_fitting}}
-\end{center}
-\end{figure}
-
-One effective way of reducing the high variance is to train multiple models instead of a single model and then combine the predictions from all models, as shown in Fig. \ref{fig_ensemble_learning}. This is called ensemble learning.
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[width = 8cm]{img/ensemble_learning.png}
-\caption{The illustration of ensemble learning. Three models A, B, and C are trained using the same training data, and the final prediction is the combination of the output from all three models. From towardsdatascience.com \label{fig_ensemble_learning}}
-\end{center}
-\end{figure}
-\subsubsection{Dropout layers}
-Ensemble learning can effectively reduce overfitting, but it is computationally more expensive as more models need to be trained. A single model can simulate the process of having different network architectures by dropping out nodes during training \cite{srivastava2014dropout}. As shown in Fig. \ref{fig_dropout}, the output of some nodes are randomly "dropped" to 0. This computationally cheap way is proven to be a remarkably effective regularization method to reduce overfitting. Dropout can be applied to all types of layers. In Keras, it is either integrated as a layer parameter or used directly as an independent layer. Below are some examples Keras dropout code.
-\begin{lstlisting}[language=python,frame=single]
-# 1. adding a dropout layer between two fully connected layers
-keras.layers.Dense(units=64, ...)
-keras.layers.Dropout(rate=0.5, ...)
-keras.layers.Dense(units=1)
-# 2. applying dropout in an LSTM layer
-keras.layers.LSTM(units=32, dropout=0.5, ...)
-\end{lstlisting}
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[height = 6cm, width = 10cm]{img/dropout.png}
-\caption{An example of applying dropout in fully connected layers. During training, the two nodes in the middle layer are dropped out meaning that their outputs to the next layer become 0. \label{fig_dropout}}
-\end{center}
-\end{figure}
-\subsubsection{Training, validation, and testing dataset}
-Preparing the dataset is one of the most important steps in developing deep learning applications. Generally, in order to compare with other programs, the comparative performance on one or several gold standard testing datasets are needed. These testing datasets are often called benchmark data. One can easily train and overfit the benchmark and report good performance that fails to generalize to other datasets, so during the development process, the model should not be trained on the benchmark dataset or similar data. However, we still need a way is to tell if the model is trained well. The most popular way is to split the training dataset into two parts, training and validation. During the model development cycle, the model is trained on the training data. If the performance on the training data is satisfactory, the model is evaluated against the validation data. Results obtained on training and validation data should be similar, otherwise it is an indication of overfitting. This can be done for several rounds until the achievement of good performance. Then the performance on the testing data is reported. All adjustments to the model should be based on training and validation data only, not on benchmark data.
-\subsubsection{Data augmentations and sampling}
-As discussed earlier in Fig. \ref{fig_data_performance}, generally speaking, the more data to train a model, the better performance it renders. However, trainig data can be limited due to various reason. Many techniques are designed to synthetically create more data. This is called data augmentation. In computer vision, popular data augmentations include image mirroring, random cropping, and color shifting.  
-
-Many machine learning algorithms are designed to train on classification data with balanced data, but biological data is often unbalanced. For example, in a tumor image classification dataset, most of the images are benign, and only a small portion is malignant. Data sampling is a collection of techniques that transform a training dataset in order to balance or better balance the class distribution \cite{chawla2004special}. Popular techniques include randomly under-sampling the majority class, randomly over-sampling the minority class, and Sythetic Minority Oversampling Technique (SMOT) \cite{chawla2002smote}.
-\subsection{Previous Methods}
-Similar to PPI predictions, the experimental methods for PPI binding sites identification are labor and time intensive. Computational methods are needed to bridge the gap, and many have been developed \cite{cao2006enhanced, ofran2007isis, du2009improved, chen2009sequence, london2010structural, chen2010sequence, murakami2010applying, xue2011homppi, amos2011binding, jones2012psicov, asadabadi2013predictions, singh2014springs, wang2014fast, geng2015prediction, laine2015local, hwang2016hybrid, maheshwari2015prediction, liu2016prediction, wei2016protein, maheshwari2016template, jia2016ippbs, zhang2019sequence, wang2019protein, zhang2019scriber, zeng2019protein, xie2020prediction}. Out of the above mentioned twenty six computational methods, all but one are machine learning based. Computational methods can be classified into three categories, sequenced based, structure based, and combined. Among them, sequence-based approaches are usually faster and cheaper. They are also more universal because comparing to sequence information, structure information is still limited. 
-
-Machine learning methods use feature groups to represent each protein sequence. Widely used features such as position-specific scoring matrix (PSSM), evolutionary conservation (ECO), putative relative solvent accessibility (RSA) have been assessed in \cite{zhang2019comprehensive}. High-scoring segment pair (HSP) has been used in previous methods for PPI prediction \cite{li2017sprint}. One-hot vectors \cite{zhang2019sequence, zeng2019protein} and amino acid embedding \cite{asgari2015continuous, heinzinger2019modeling, asgari2019probabilistic} have also been empirically explored to represent protein sequences.
-
-The learning structure is crucial to PPI binding sites classification problems. Previously explored architectures include random forest \cite{wei2016protein, wang2019protein}, SVM \cite{wei2016protein}, logistic regression \cite{zhang2019scriber}, Bayes classifier \cite{murakami2010applying}, artificial neural networks \cite{singh2014springs}. Recently, convolutional neural network (CNN) \cite{zeng2019protein} and recurrent neural network (RNN) \cite{zhang2019sequence} have also been applied to solve this problem. 
-
-\subsubsection{PIPE-sites}
-PIPE-Sites \cite{amos2011binding} is a algorithmic based PPI binding site program based on the PPI prediction program PIPE \cite{pitre2006pipe}. It requires only protein sequences and known interactions. As one of the few partner-specific sites predictors, PIPE-Sites is able to predict different binding sites for the same protein but with different partners. For example, protein A interacts with protein B and C, and the binding sites between A-B and A-C are different. PIPE-sites is able to predict these different sites in protein A.
-
-The algorithm of PIPE-Sites is shown using an example in Figure \ref{fig_PIPE-Sites}. Using the PIPE program, the scoring matrix is built for a protein pair, the program first finds the peak location. Then it extend from the peak towards all four directions until the value drops below a predefined threshold, percentPeak. Residues within the window are considered binding sites. If there are multiple peaks, PIPE-sites will generate a ranked list, in descending order, of potential binding sites.
-
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[height =9 cm]{img/PIPE_site_cut.JPG}
-\caption{The walk algorithm of PIPE-Sites. PIPE-Sites detects first the peak in the matrix 89. Then it extends towards all four directions until the score drops below a threshold percentPeak. Depends on the choice of percentPeak, different windows are drawn. Residues within the window are considered binding sites. From: \cite{amos2011binding}  \label{fig_PIPE-Sites}}
-\end{center}
-\end{figure} 
-
-% In the paper of PIPE-sites \cite{amos2011binding}, the authors claim that PIPE-sites is accurate by checking the predicted sites against some domain databases. Figure \ref{fig_PIPE-Sites_eg} shows examples of two matrices that PIPE produces. The left one shows a highly possible binding site between protein Q13444 and protein O15259. The peak location is the predicted site (location 700-800 in Q13444, location 100-200 in O15259). The right picture indicates that there is no interaction between YGL055W and YBL090W as there is no high peak in the matrix. 
-% \begin{figure}[h!]
-% \begin{center}
-% \includegraphics[height = 6 cm]{img/pipe_sites_ex.png}
-% \caption{Examples of PIPE-Sites matrices. (From: \cite{amos2011binding})  \label{fig_PIPE-Sites_eg}}
-% \end{center}
-% \end{figure} 
-
-\subsubsection{DLPred}
-DLPred \cite{zhang2019sequence} is a sequence based protein binding predictor published in 2019. Its architecture is shown in Fig. \ref{fig_DLPred}. The main layers in DLPred model are simplified LSTM layers and fully connected layers. The simplified LSTM is developed by the authors, and the main purpose is to reduce the time consumption. The features used are PSSM, physical properties, hydropathy index, physicochemical characteristics, PKx (the negative of the logarithm of the dissociation con- stant for any other group in the molecule), conservation score, and one-hot encoding for protein sequences. DLPred also adopts a filtered sampling technique such that sequences with more binding residue are picked. They empirically show that this helps deal with the imbalance of the protein biding problem.
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[height = 6 cm]{img/DLPred.png}
-\caption{The architecture of DLPred. Three BSLSTM layers are followed by two fully connected layers with highway connection.  (From: \cite{zhang2019sequence})  \label{fig_DLPred}}
-\end{center}
-\end{figure} 
-
-\subsubsection{DeepPPISP}
-DeepPPISP \cite{zeng2019protein} is a recent protein binding prediction utilizing secondary structure. As shown in Fig. \ref{fig_DeepPPISP}, the network structure of DeepPPISP consists of a TextCNN component to extract feature features and two fully connected layers to classify protein binding residue. The TextCNN is a variation of the convolution layers meant to handle lower dimension tensor. DeepPPISP is highlighted for the usage of both local and global information. For each given amino acid, the local information is the neighboring seven amino acids of the target amino acid, and the global information is its     neighboring 500 amino acids. It is shown empirically in the paper that the usage of global information largely helps the prediction. 
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[width = 14cm]{img/DeepPPISP.png}
-\caption{The architecture of DeepPPISP. The inputs are both sub-sequence (local) and whole protein sequence. For local features, sequence embedding, PSSM, and secondary structure are combined and then flattened a local feature vector. For global features, sequence embedding, PSSM, and secondary structure are concatenated and then passed through TextCNN layers. The features extracted from local and global sequence are further concatenated and passed through fully connected layers.  (From: \cite{zeng2019protein})  \label{fig_DeepPPISP}}
-\end{center}
-\end{figure} 
-
-\subsubsection{SCRIBER}
-SCRIBER \cite{zhang2019scriber} is another sequence-based protein binding residue predictor published in 2019. It uses the following feature: putative relative solvent accessibility (RSA), evolutionary conservation (ECO), relative amino acid propensity (RAAP) for binding, and the selected relevant physiochemical properties, putative protein binding intrinsically disordered regions, putative secondary structure (SS), and selected physicochemical properties of amino acids (aliphaticity, aromaticity, acidity and size). The core layer of the model is a simple logistic regression. The key innovative idea of SCRIBER is that it is trained using not only protein-protein binding information, but also protein binding information with RNA, DNA, ligand, and other type. As shown in Fig. \ref{fig_SCRIBER}, in the first layer of SCRIBER, five different models are trained using five binding information. In the second layer, the prediction values of the five models are used as input to train another model aiming to predict protein-protein binding sites only. The intuition is that models make false predictions because they mistakenly cross-predict other types of binding. For example, a non-protein-protein binding residue is predicted to have high propensity for protein-protein binding, but it is actually a residue for DNA binding. The mistake happens because of the different types of bindings share some similar properties. Because SCRIBER is not a deep learning based method, it uses a relatively small training dataset containing 843 proteins.
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[height = 7cm]{img/SCRIBER.png}
-\caption{The architecture of SCRIBER. The first layer predicts the propensities for DNA-binding (red), RNA-binding (violet), small ligand-binding (orange), other-binding (blue) and protein-binding (green) residues. These propensities are used together in the second layer to predict protein-protein binding sites. (From: \cite{zhang2019scriber})  \label{fig_SCRIBER}}
-\end{center}
-\end{figure} 
-\section{Methods}
-This section describes in details our program DELPHI for binding site prediction. It is trained on a big dataset comparing to the competitors. DELPHI combines a CNN and a RNN components with a many-to-one structure. It uses twelve features to represent protein sequences, among them three are used first time for site prediction. The comparative analysis shows that DELPHI has a better prediction accuracy in all evaluation metrics. 
-
-\subsection{Training Data Preparation}
-Training data is one of the most important factors in training a model. An trend in applied machine learning research field is that a good publication always comes good data. 
-    
-\subsubsection{Raw data}
-We first collected a relatively large amount of raw data. A high quality dataset was provided in \cite{zhang2019comprehensive}, where proteins were solved structurally in complex from the BioLiP \cite{yang2012biolip} database. In BioLip, two residue are considered binding if the distance between the atoms of the 
-two residues $<$0.5+sum of the Van der Waal's radii of the two atoms. BioLip IDs are then mapped into UniProt IDs using SIFTS \cite{velankar2012sifts} to insure we work with complete sequences. Then we left with sequences annotated with Protein, DNA, RNA, and small ligands binding information at the residue level. We kept only the sequences with protein-protein binding information to focus on protein-protein binding.
-\subsubsection{Similarities eliminations}
-We further processed this dataset by eliminating similarities. We removed any sequences from training dataset sharing more than 25\% similarities, as measured by PSI-CD-hit \cite{li2006cd,fu2012cd}, with any sequences in testing datasets. It is well acknowledged that similar sequences between training and testing datasets negatively affect the generalization of the evaluated performance of a machine learning model. Also, proteins with higher levels of similarity can be accurately predicted by the alignment-based methods \cite{zhang2018review}. The similarity threshold is picked differently by different programs ranging from 25\% to 50\%. We picked the strictest value of 25\% to match to one of the closest competing programs, SCRIBER \cite{zhang2019scriber}, for a fair comparison. We used PSI-CD-HIT because it is fast, accurate and well maintained in the CD-HIT suite. Also, it is able to cluster sequences with similarity at low as 25\%, whereas CD-HIT works only down to 40\%. Finally, we ran PSI-CD-hit again on the rest of the training protein sequences so no sequences shared more than 25\% similarities among training data. This ensures the training data is as diverse as possible. The commands to cluster proteins using PSI-CD-HIT are as follows.
-\begin{lstlisting}[language=bash,frame=single]
-# convert fasta file to blast database format
-$ makeblastdb -in [fasta_file_name] -dbtype prot
-# compute protein clusters
-$ psi-cd-hit/psi-cd-hit.pl -i [fasta_file_name] -o [out_file_name] -c 0.25
-\end{lstlisting}
-\subsubsection{Data split}
-After the similarities elimination process, A dataset of 9,982 protein sequences was constructed. From it, we randomly pick eight ninth (8,872) as the training dataset and one ninth (1,110) as the validation dataset. This can be done by using the model\_selection module from sklearn. The commands are as follows.
-\begin{lstlisting}[language=python,frame=single]
-kfold = KFold(n_splits=9)
-for train, test in kfold.split(dataset_all)
-    ...
-\end{lstlisting}
-
-
-\subsection{Features}
-DELPHI uses 12 features groups, shown in Table \ref{tab_feture}, including high-scoring segment pair (HSP), a variation of 3-mer amino acid embedding (ProtVec1D), position information, position-specific scoring matrix (PSSM), evolutionary conservation (ECO), putative relative solvent accessibility (RSA), relative amino acid propensity (RAA), putative protein-binding disorder, hydropathy index, physicochemical characteristics, physical properties, and PKx. Each input is represented by a 39 dimensional feature vector profile. To the best of our knowledge, this study is the first time that HSP, ProtVec1D, and position information are being used in binding sites classification problems. The computation of each of these two new features is described next.
-
-\begin{table}[htbp]
-  \centering
-  \caption{The feature groups used by DELPHI. The first column indicates the name of each feature. The second column describes the program used to obtain the feature. ``Load'' means the value for a specific amino acid is known from previous work, and it is loaded in the DELPHI program. ``Compute'' means DELPHI performs additional computation to that feature. The last column shows the dimension of each feature group. Full details are given in the text.}
-    \begin{tabular}{p{20.93em}p{11em}r}
-    \toprule
-    Feature & Program & \multicolumn{1}{p{5.145em}}{Dimension} \\
-    \midrule
-    High-scoring segment pair (HSP) & SPRINT and compute & 1 \\
-    % \midrule
-    3-mer amino acid embedding (ProtVec1D) & Load and compute & 1 \\
-    % \midrule
-    Position information & Compute & 1 \\
-    Position-specific scoring matrix (PSSM) & Psi-Blast & 20 \\
-    % \midrule
-    Evolutionary conservation (ECO) & Hhblits & 1 \\
-    % \midrule
-    Putative relative solvent accessibility (RSA) & ASAquick & 1 \\
-    % \midrule
-    Relative amino acid propensity (RAA) & Load  & 1 \\
-    % \midrule
-    Putative protein-binding disorder & ANCHOR & 1 \\
-    % \midrule
-    Hydropathy index & Load  & 1 \\
-    % \midrule
-    Physicochemical characteristics & Load  & 3 \\
-    % \midrule
-    Physical properties & Load  & 7 \\
-    % \midrule
-    PKx   & Load  & 1 \\
-    \bottomrule
-    \end{tabular}%
-  \label{tab_feture}%
-\end{table}%
-
-High-scoring segment pair (HSP): An HSP is a pair of similar sub-sequences between two proteins. The similarities between two sub-sequence of the same length are measured by scoring matrices such as PAM and BLOSUM. SPRINT \cite{li2017sprint} is used for computing all HSPs as it detects similarities fast and accurately among all proteins in training and testing. After obtaining the HSPs, the score for the $i$th residue, $P[i]$, of a testing protein $P$, denoted $\text{HSP}_{\text{score}}(P[i])$, is calculated as follows. Assume we have an HSP, $(u,v)$, between $P$ and a training protein $Q$ such that $u$ covers the residue $P[i]$, that is, position $i$ in $P$ is within the range covered by $u$. Let $j$ be the position in $Q$ that corresponds to $i$, that is, the distance in $P$ from the beginning of $u$ to $i$ is the same as the distance in $Q$ from the beginning of $v$ to $j$. If $Q[j]$ is a known interacting residue, then we add the PAM120 score between $P[i]$ and $Q[j]$ to the HSP score of $P[i]$:
-\[
-\text{HSP}_{\text{score}}(P[i]) = \!\!\!\!\!\!\sum_{\stackrel{\text{\tiny HSPs covering $P[i]$}}{\text{\tiny $Q[j]$ interacting residue}}}\!\!\!\!\!\! \max(0, \text{PAM120}(P[i], Q[j])) \ .
-\]
-The 3-mer amino acid embedding (ProtVec1D): We developed this feature based on ProtVec \cite{asgari2015continuous}. ProtVec uses word2vec \cite{mikolov2013distributed} to construct a one hundred dimensional embedding for each amino acid 3-mer. It is shown in \cite{asgari2015continuous} that ProtVec can be applied to problems such as protein family classification, protein visualization, structure prediction, disordered protein identification, and protein-protein interaction prediction. Since using the ProtVec embedding in our program slows down significantly the deep learning model, especially during training, we replaced the one hundred dimensional vector by one dimensional value, which is the sum of the one hundred components; we call this ProtVec1D. According to our tests, ProtVec1D achieves, in connection with the other feaures, the same prediction performance as ProtVec. In Keras, a pre-trained embedding layer can be use as follows.
-\begin{lstlisting}[language=python,frame=single]
-# initialize the pre-trained embedding as a dictionary
-embedding_matrix = {}
-...
-# add an embedding layer with pre-traind weights
-keras.layers.Embedding(input_dim = 31, output_dim = 100,
-weights=[embedding_matrix], trainable=False)
-\end{lstlisting}
-
-Position information: In natural language processing tasks, position information is shown useful. The popular network Bert \cite{devlin2018bert} utilizes this information to guide its translation process. It is also shown by DeepPPISP \cite{zeng2019protein} that the global information of a protein helps the prediction of interfaces. Inspired by the two networks, we use the position information of each amino acid as an input feature hoping that it provides certain global information of a protein. The position of an amino acid in a protein is in the range of 1 to the length of the protein. Then the position is divided by protein's length so that the value is between 0 to 1.
-
-Position-specific scoring matrix (PSSM): PSSM matrices are widely used in protein interaction related problems. They contain the evolutionary conservation of each amino acid position by aligning an input sequence with protein databases. The PSSM matrices are computed using PSI-Blast \cite{altschul1997gapped} with the expectation value (E-value) set to 0.001 and the number of iterations set to 3. PSI-Blast performs multiple alignment on each input sequence against the non-redundant database. PSSMs take fairly a long time to compute, but for each sequence, it only needs to be done once. The psiblast command I used is as follows.
-\begin{lstlisting}[language=bash,frame=single]
-$ psiblast -query [input_protein_fasta] -db [nr] -num_threads 3
--out_ascii_pssm ${out_pssm} -num_iterations 3
-\end{lstlisting}
-
-Evolutionary conservation (ECO): ECO also contains evolutionary conservation, but in a more compact way. To compute the ECO score, the faster multiple alignment tool HHBlits \cite{remmert2012hhblits} is run against the non-redundant Uniprot20 database with default parameters. The one dimensional conservation value is computed using the formula described in \cite{zhang2019comprehensive}. The commands used for conducting multiple alignment using hhblits as follows.
-\begin{lstlisting}[language=bash,frame=single]
-$ hhblits -i [input] -ohhm [output]  -d [database] -hide_cons 
--hide_pred -hide_dssp -v 0  -neffmax 1 -n 1
--out_ascii_pssm ${out_pssm} -num_iterations 3
-\end{lstlisting}
-
-Putative relative solvent accessibility (RSA): The solvent accessibility is predicted using ASAquick \cite{faraggi2014accurate}. The values are obtained in the from rasaq.pred file in each output directory. The ASAquick command is as follows.
-\begin{lstlisting}[language=bash,frame=single]
-$ ASAquick [input]
-\end{lstlisting}
-
-
-Relative amino acid propensity (RAA): The AA propensity for binding is quantified as relative difference in abundance of a given amino acid type between binding residues and the corresponding non-binding residues located on the protein surface. The RAA for each amino acid type is computed in \cite{zhang2019comprehensive} by using the program of  \cite{vacic2007composition}.
-
-Putative protein-binding disorder: The putative protein-binding disorder is computed using the ANCHOR program \cite{dosztanyi2009anchor}. The used ANCHOR command is as follows.
-\begin{lstlisting}[language=bash,frame=single]
-$ anchor [input] -d [ANCHOR_DIR]  > ${raw_Anchor_dir}/${f_basename}.anchor
-\end{lstlisting}
-
-Hydropathy index: Hydrophobicity scales is experimentally determined transfer free energies for each amino acid. It contains energetics information of protein-bilayer interactions \cite{wimley1996experimentally}. The values are computed in \cite{kyte1982simple}.
-
-Physicochemical characteristics: For each protein, this includes three features: the number of atoms, electrostatic charges and potential hydrogen bonds for each amino acid. They are taken from \cite{zhang2019sequence}.
-
-Physical properties: We use a 7-dimensional property of each amino acid type. They are a steric parameter (graph-shape index), polarizability, volume (normalized van der Waals volume), hydrophobicity, isoelectric point, helix probability and sheet probability. The pre-computed values are taken from \cite{zhang2019sequence}.
-
-PKx: This is the negative of the logarithm of the dissociation constant for any other group in the molecule. The values for each amino acid type is taken from \cite{zhang2019sequence}.
-
-After computing all the feature vectors, the values in in each row vector are normalized to a number between 0 to 1 using formula (\ref{eq_normalized}) where \textit{v} is the original feature value, and max and min are the biggest and smallest value observed in the training dataset, resp. This is to ensure each feature group are of the same numeric scale and help the model converge better:
-
-\begin{equation}
-v_\text{norm}=\dfrac{v-\text{min}}{\text{max}-\text{min}}\label{eq_normalized}
-\end{equation}
-
-\subsection{Model Architecture}
-\subsubsection{Architecture overview}
-DELPHI has an architecture that is inspired by ensemble learning. The intuition of the design is that different components of the model capture different information, and another deep neural network is trained to only select the most useful ones. As shown in Fig. \ref{fig_architecture}, the model consists of three parts, a convolutional neural network (CNN) component, an recurrent neural network (RNN) component, and an ensemble component. The core layers of the CNN and RNN components are convolution and bidirectional gated recurrent units (GRU) layers. The ensemble model decodes the output of the first two components.  
-
-\begin{figure*}
 \centering
-\includegraphics[width=\textwidth]{img/Model_architecture.pdf}
-\caption{The architecture of DELPHI. Left: the CNN component of the model. Middle: the RNN component of the model. Right: The ensemble model. 
-  \label{fig_architecture}}
-\end{figure*}
-\subsubsection{Many-to-one structure}
-Another very useful characteristic of the model is its many-to-one structure, meaning that the information of many residues are used to prediction the binding propensity of the centered single residue. As illustrated in Fig. \ref{fig_many2one}, for each amino acid as the prediction target, a window of size 31, centred on the amino acid position, is used to collect information from the neighbouring 30 residues to help the prediction. A sliding window is used to capture each 31-mer. The size 31 is determined experimentally. The beginning and the ending part of the sequence are padded with zeros. The many-to-one structure has two advantages. Firstly, it serves as a data augmentation technique. Deep learning models need large amount of data to train, and comparing to image classifiers, models in proteomics have access to orders of magnitude less data. Using each residue multiple times during the training process helps the model learn better. Secondly, it makes the model more robust. The lengths of protein sequence vary from less than one hundred to several thousand, and most a many-to-many models have a fixed input length of near 500. During training, sequences around length 500 are often picked. However, during testing, input sequences are random and need to be either padded or cut into pieces. The different average lengths between training and testing could potentially make the model less general. 
-\begin{figure*}
-\centering
-\includegraphics[width=\textwidth]{img/many_2_one.pdf}
-  \caption{The many-to-one prediction. Sliding windows of size 31, stride 1 are put on top of an input protein sequence. Each time, a sub-sequence of length 31 is extracted. The model predicts the protein-binding propensity of the middle amino acid for each sub-sequence.
-  \label{fig_many2one}}
-\end{figure*}
-\subsubsection{CNN component}
-The CNN model one has a concise structure: one convolution layer, one maxpooling layer, one flatten layer, and two fully connected layers. For each input sub-sequence of size 31, a 2D feature profile of size 39 by 31 is constructed. The 2D vector is reshaped into 3D and then passed to a convolution 2D layer, followed by a maxpooling layer. The intuition of using the convolution and maxpooling layers is that a 2D protein profile vector can be considered as an image with one channel, and the CNN model captures the combination of several features in a partial image. The results are flattened and then fed into two fully connected layers with dropout for regularization. The last fully connected layer has one unit with activation function sigmoid, so that the output is a single value between 0 to 1. The higher the value, the more confident the CNN model claims that the residue is a PPI binding site.
-\subsubsection{RNN component}
-The RNN component has the following structure: one bidirectional GRU layer, one flatten layer, and two fully connected layers. Similar to the CNN component, a 2D feature profile of size 39 by 31 is built for each 31-mer. The feature profile is passed to a bidirectional gated recurrent units (GRU) layer with the intention to memories the dependency and relationship among the 31 residues. We set the GRU layer to return a whole sequence as opposed to return a single value. The results are flattened and fed into two fully connected layers with dropout. The output of the RNN network is also a single value between 0 to 1.
-\subsubsection{Ensemble component}
-The final model combines the core layers of the above mentioned CNN and RNN models and tries to further extract essential information of protein binding. The ensemble network takes a sequence of length 31 as its input. Similar to the CNN and RNN components, a 39 by 31 feature vector is constructed and passed to both a convolution layer and a bidirectional GRU layer. The output of the convolution layer is passed on to a maxpool layer and then flattened. The GRU output is also flattened. Then the outputs of the two flatten layers are concatenated and passed on to two fully connected layers with dropout. The last fully connected layer has one output unit with a sigmoid activation function, so the final output is a single value between 0 to 1, indicating the propensity of being binding sites. This is the final output of the entire model. 
-
-Fine tuning is used in this ensemble model. The convolution layer in the CNN network and the bidirectional GRU layer in the RNN network are tuned separated using the same training/validation dataset. After achieving the best performance on the CNN and the RNN components, the weights of the convolution and the GRU layer are saved to files. In the ensemble model, the convolution and the GRU layer load the saved weights from the file and freeze the weights, so that during the process of training, the convolution and the GRU layer stay unchanged. Training and validation data are used again only to train the fully connected layers in the ensemble model. The code snippet on fine tuning is as follows.
-\begin{lstlisting}[language=python,frame=single]
-# initialize model checkpoint
-mc = ModelCheckpoint("SavedModelAndWeights.h5",
-monitor = 'val_loss', mode='min', save_best_only=True)
-# save model and weights during training
-model.fit([features, labels, callbacks=[mc]
-# in the ensemble model, load weights for conlution and GRU
-model.load_weights("SavedModelAndWeights", by_name=True)
-\end{lstlisting}
-
-\subsection{Parameter/Hyper-parameter Tuning}
-Parameters and hyper-parameters are chosen based on the training dataset while applying early stopping \cite{prechelt1998early} on the validation set. As shown in Fig. \ref{fig_earlyStop}, early stopping halts the training process when a performance drop on the validation set is detected. This is to avoid overfitting the training dataset. The early stopping code snippet using Keras callbacks module is as follows.
-\begin{figure}[!h]
-\begin{center}
-\includegraphics[width = 9cm]{img/early_stop.png}
-\caption{Illustration of early stopping. The training process stops at the arrow point. The right side of the point is overfitting the training dataset. The left side of the point is underfitting. \label{fig_earlyStop}}
-\end{center}
+\includegraphics[width=15cm]{img/SPRINT_workflow.png}
+\caption[The workflow of SPRINT]{The workflow of SPRINT. First sequences are indexed with spaced-seeds into multiple hashtables (left). Then HSPs are detected by fast traversing the hashtables (middle). Last, known PPIs are loaded and used together with HSPs for predicting new interactions. \label{fig_SPRINT_workflow}}
 \end{figure}
 
-\begin{lstlisting}[language=python,frame=single]
-es = EarlyStopping(monitor='val_loss', mode='min', patience=4)
-model.fit([features, labels, callbacks=[es]
-\end{lstlisting}
-We chose all parameters with the purpose to maximize area under the precision-recall curve (AUPRC) of the training data. All testing results are then carried using the already tuned model. All parameters and hyper-parameters used in this model are shown in Table \ref{tab_parameter}.
+\subsection{Detecting Similarities \label{sec_detect_simi}}
+As mentioned above, the first step of SPRINT is the identification of similar subsequences among the input protein sequences. This is done using multiple spaced seeds with the hit-and-extension method.
 
-The DELPHI model takes 2.1 hours to train the CNN component, 0.5 hour to train the RNN component and 1.3 hours to train the ensemble model on our testing cluster.
+A spaced match requires only the amino acids in positions corresponding to {\tt 1}'s in the seed to match. For example,  a hit in seed 11****11***1 only needs the amino acids in positions 1, 2, 7, 8, and 12 have to match. Given the spaced seed above, two \textit{exact} spaced matches are underlined in Figure~\ref{fig_s-match}(a).
 
-% Table generated by Excel2LaTeX from sheet 'Sheet1'
-\begin{table}[htbp]
-  \centering
-  \caption{Parameters used in DELPHI. Parameters are divided into four groups: CNN, RNN, ensemble model, and hyper-parameters.}
-    \begin{tabular}{lr}
-    Parameter & Value \\
-    \midrule
-    \midrule
-    Epoch in CNN & 8 \\
-    Kernel size in CNN & 5 \\
-    Stride in CNN & 1 \\
-    Padding in CNN & valid \\
-    Number of filters in CNN & 64 \\
-    Fully connected unit in CNN & 64, 1 \\
-    \midrule
-    Epoch in RNN & 9 \\
-    GRU unit & 32 \\
-    Fully connected unit in RNN & 64, 1 \\
-    \midrule
-    Epoch in ensemble & 5 \\
-    Fully connected unit in ensemble & 96, 1 \\
-    \midrule
-    Batch size & 1024 \\
-    Dropout rate & 0.3 \\
-    Optimizer & Adam ($\beta_1=0.9, \beta_2=0.999$) \\
-    Patience in early stop & 4 \\
-    Loss function & binary cross entropy \\
-    Learning rate & 0.002 \\
-    \bottomrule
-    \end{tabular}%
-  \label{tab_parameter}%
-\end{table}%
-\subsection{Implementation}
-Many open sourced programs in bioinformatics are not well written and maintained. It is frustrating for future researchers spending weeks even months just to compile and run a program. The engineering quality in academia is often compromised and forgiven. Indeed, research novelty is more important than good coding structure, git practise, and readability, but good engineering always plays a key role in successful projects. Projects like LLVM \cite{lattner2004llvm} and TensorFlow \cite{tensorflow2015-whitepaper} have thrived for years with huge open source communities not only because of the back scene innovational ideas, but also because of the excellent code base and infrastructure. We provide here some environment and implementation details hoping to help users to use DELPHI better, recreate results easier, and improve upon the current code base.
+\begin{figure}[h!] 
+\centering
+\includegraphics{img/fig_s-match.pdf}
+\caption[Spaced-seed hits]{An exact hit (a) and an approximate hit (b) of the same spaced seed.\label{fig_s-match}}
+\end{figure}
 
-\subsubsection{Environment configuration}
-System environment configuration is a step many researchers ignore or choose to do improperly. Each project has its unique compiler, package, and environmental variable settings. DevOp skills are not trivial for AI engineers without system configure experience. There are several solutions to ensure users running a program under the correct environment. Containers like docker is a complete industrial solution. Docker stores the entire operation system (OS) in an image, and the users can load the image such that the environment is identical. However, containers at the OS level is too heavy weighted. Lighter weighted solutions such as Python Virtual Environment, Anaconda are sufficient at package level, especially for python package management. According to GitHub statistics in 2019, about 50\% of the machine learning languages are written in Python.
+There is a trade-off between speed and sensitivity. Lower weight has increased sensitivity because it is easier to hit similar regions but lower speed since more random hits are expected and have to be processed. The best value for our problem turned out to be five.
 
-DELPHI uses Python (3.5) Virtul Environment to manage all packages. Each virtual environment has its own packages and dependencies installed locally. Users can switch between any project environment without root permission nor modifying system directories. All packages needed by DELPHI is stored in Requirements.txt. The commands to creat the virtual environment for DELPHI are as follows.
-\begin{lstlisting}[language=bash,frame=single]
-# create a python3 environment
-$ virtualenv -p [python3.5_path] [environment_name] 
-# activate the newly created environment
-$ source [environment_name]/bin/activate 
-# install all packages neede by DELPHI
-$ pip3 install -r Requirements.txt 
-\end{lstlisting}
+As briefly mentioned in Section \ref{sec_multiple_spaced_seed}, the distribution of matches and don't care positions is crucial for the quality of the seeds and we have used SpEED~\cite{Ilie07_spacedSeeds,Ilie11_SpEED} to compute the following seeds used by SPRINT; we have experimentally determined that four seeds of weight five are the best choice: $\textsc{Seed}_{4,5} = \{$\texttt{11****11***1}, \texttt{1**1*1***1*1}, \texttt{11**1***1**1}, \texttt{1*1******111}$\}$.
 
-The DELPHI program is written in python, with Keras \cite{chollet2015keras} APIs and TensorFlow GPU back end. All features are computed from sequence only. We alleviate the burden of feature computation from users by providing all computation programs and a pipeline script. We ease the system configuration process by providing users a pip package list which enables one-command installation. 
+In order to further increase the probability of finding similar subsequences, we consider also hits between similar matches, as opposed to exact ones. For example, the two amino acid sequences in Figure~\ref{fig_s-match}(b), though similar, do not have any \textit{exact} spaced matches. In order to capture such similarities, we consider also hits consisting of \textit{similar} spaced matches; an example is shown by the underlined subsequences in Figure~\ref{fig_s-match}(b).
 
-\subsubsection{Class weights}
-Classifying protein binding residue is an imbalanced problem. To cope with that, different class weights \cite{ting2002instance} are assigned to the positive and negative samples, so that the model pays more attention to the minority class, which is the binding sites.  The values are determined by the inverse of the class distribution in the training datasets. In our program, the weights are 0.55 and 4.97 for the non-binding and binding sites respectively. The code piece for implementing the class weights is as follows.
-\begin{lstlisting}[language=python,frame=single,basicstyle=\small]
-# compute the class weight in a balanced manner
-cw = class_weight.compute_class_weight('balanced',
-                np.unique(all_labels),all_labels)
-# apply the class weights during training
-model.fit(class_weight = cw, ...)
-\end{lstlisting}
+To make this idea precise, we need a few definitions. {\it Spaced-mers} are defined analogously with $k$-mers but using a spaced seed. A $k$-mer is a contiguous sequence of $k$ amino acids. Given a spaced seed, a spaced-mer consists of $k$ amino acids interspersed with spaces, according to the seed. For a spaced seed $s$, we shall call the spaced-mers also $s$-mers. Figure~\ref{fig_s-mers} shows an example of all $s$-mers of a sequence, for $s=${\tt 11****11***1}:
 
-\subsubsection{Data shuffling}
-During training, we shuffle the data before each epoch. Since the sliding window is used to extract each 31-mer, adjacent data entries are very similar; only the first and the last residue differ from the previous and the next data entry. Shuffling the whole training data diversifies the input in each batch. We experimentally trained the model with and without data shuffling, and shuffling the data rendered better predictions. This can be done by 
-\begin{lstlisting}[language=python,frame=single]
-  model.fit(shuffle=True, ...)
-\end{lstlisting}
+\begin{figure}[h!]
+\centering
+\includegraphics{img/fig_s-mers.pdf}
+\caption{An example of all $s$-mers of a sequence.\label{fig_s-mers}}
+\end{figure}
+
+An exact hit therefore consists of two occurrences of the same $s$-mer. An approximate hit, on the other hand, requires two similar $s$-mers.
+Assume a similarity matrix $M$ is given. Given a seed $s$ and two $s$-mers $w$ and $z$, the score between the two $s$-mers is given by the sum of the scores of the pairs of amino acids in the two $s$-mers, that is, we sum over indexes corresponding to \texttt{1}'s in the seed:
+\begin{equation}\label{eq:s-mer_score}
+S_\textrm{$s$-mer}(w,z) = \sum_{s[i]=\texttt{1}}M(w_i,z_i)\ .
+\end{equation}
+For example, for the $s$-mers $w = \texttt{VL\textvisiblespace\textvisiblespace\textvisiblespace\textvisiblespace KT\textvisiblespace\textvisiblespace\textvisiblespace A}$ and $z = \texttt{HL\textvisiblespace\textvisiblespace\textvisiblespace\textvisiblespace KS\textvisiblespace\textvisiblespace\textvisiblespace A}$ from Figure~\ref{fig_s-match}(b), we have $S_\textrm{$s$-mer}(w,z) = M(\texttt{V},\texttt{H}) + M(\texttt{L},\texttt{L}) + M(\texttt{K},\texttt{K}) + M(\texttt{T},\texttt{S}) + M(\texttt{A},\texttt{A}).$
+
+Using (\ref{eq:s-mer_score}), we define the set of $s$-mers that are \textit{similar} with a given $s$-mer $w$:
+\begin{equation}\label{eq:Sim}
+\textrm{Sim}(w) = \{z \mid z \text{ $s$-mer}, S_\textrm{$s$-mer}(w,z) \ge \Thit\}\ .
+\end{equation}
+
+Note that $\textrm{Sim}(w)$ depends on the parameter $\Thit$ that controls how similar two $s$-mers have to be in order to form a hit. It also depends on the seed $s$ and the similarity matrix $M$ but we do not include them into the notation, for clarity.
+
+All such hits dues to similar $s$-mers are found and then extended both ways in order to identify similar regions. That means, now we have to evaluate the similarity of all the amino acids involved, so we use the regular $k$-mers.
+The score between two $k$-mers $A$ and $B$ is computed as the sum of all scores of corresponding amino acids:
+\begin{equation}\label{eq_score_kmer}
+S_\textrm{$k$-mer}(A,B) = \sum_{i=1}^kM(A_i,B_i)\ ,
+\end{equation}
+where $A_i$ is the $i$th amino acid of $A$. Given a hit that consists of two $s$-mers $w$ and $z$, we consider the two $k$-mers that contain the occurrences of the two $s$-mers $w$ and $z$ in the center, denoted $\textrm{$k$-mer}(w)$ and $\textrm{$k$-mer}(z)$. If $S_\textrm{$k$-mer}(\textrm{$k$-mer}(w),\textrm{$k$-mer}(z)) \ge \Tsim$, then the two regions are deemed similar. Note the parameter $\Tsim$ that controls, together with $k$-mer size $k$, how similar two regions should be in order to be identified as such.
+
+Details of the fast implementation are given next. The protein sequences are encoded into bits using five bits per amino acid. We encode each amino acid with 5 bits. Blocks of 5 bits can have $2^5$ = 32 different values. So 5 bits are more than enough for encoding twenty amino acids. 
+Table \ref{tab_A_A_encoding} shows in detail the encoding of each amino acid. The five bits used for encoding are unrelated with the weight of the spaced seeds employed. It is a coincidence that both numbers are five. Each protein sequence is encoded as an array of unsigned 64-bit integers; each 64-bit integer stores 12 amino acids within 60 bits and 4 bits are unused. Each spaced seed is encoded using also five bits per position, {\tt 11111} for a {\tt 1} (match) and {\tt 00000} for a {\tt *} (don't care), also into an unsigned 64 integer.  
+
+\begin{table}[h!]
+\begin{center}
+\begin{tabular}[h!]{|c|c|c|} 
+%c stands for centre, l for left, r for right; the | puts lines in between, and the hline puts a horizontal line in
+\hline
+Amino acid name & Notation in FASTA format & 5-bit encoding \\
+\hline
+Alanine & A & 00000 \\
+\hline
+Arginine & R & 00001\\
+\hline
+Asparagine & N & 00010 \\
+\hline
+Aspartic acid & D & 00011 \\
+\hline
+Cysteine & C & 00100 \\
+\hline
+Glutamine & Q & 00101 \\
+\hline
+Glutamic acid & E & 00110 \\
+\hline
+Glycine & G & 00111 \\
+\hline
+Histidine & H & 01000\\
+\hline
+Isoleucine & I & 01001 \\
+\hline
+Leucine & L & 01010 \\
+\hline
+Lysine & K & 01011 \\
+\hline
+Methionine & M & 01100 \\
+\hline
+Phenylalanine & F & 01101 \\
+\hline
+Proline & P & 01110\\
+\hline
+Serine & S & 01111 \\
+\hline
+Threonine & T & 10000 \\
+\hline
+Tryptophan & W & 10001 \\
+\hline
+Tyrosine & Y & 10010 \\
+\hline
+Valine & V & 10011 \\
+\hline
+\end{tabular}
+\caption[Amino acid encoding]{Amino acid encoding. Each amino is encoded with 5-bits (last column). \label{tab_A_A_encoding}}
+\end{center}
+\end{table}
+
+All spaced-mers in all protein sequences are computed and stored in a hash table, together with their location in the protein sequences. Because of our representation, the computation of each spaced-mer requires only one bitwise AND and one bit SHIFT operation which is much faster than string operations. 
+
+Finding HSPs start with finding hits, that is, matching $s$-mers. In order to do this fast, we use a hash table. All extracted $s$-mer will be stored in the hash table. For each seed, we have one hash table. The hash function is shown in \ref{eq_hash_func}. Liner probe is used for hash collision.  
+\begin{equation}
+entry\_index = s\_mer\_value \text{ }\%\text{ } hash\_size
+\label{eq_hash_func}
+\end{equation}
+
+where the hash size is determined when encoding proteins. For each seed, the maximum number of $s$-mers is:
+\begin{displaymath}
+number{\_}of{\_}smers = \sum_{i=1}^{num\_of\_pro} (protein\_length - seed\_length +1).
+\end{displaymath}
+
+The program automatically chooses the smallest prime number which is bigger than the number of $s$-mers, from a list of precomputed large prime numbers, as hash size. Hash collisions are solved using linear probing. In each entry of the hash table, we store its $s$-mer value along with a pointer to an array of positions, which keeps a record of protein ids and starting positions of that $s$-mer. The pseudocode for computing the eight hash tables is given in Algorithm  \ref{algo:comp_ht}. Algorithm \ref{algo:insert_ht} shows the insertion into hash table in detail.
+
+\begin{algorithm}[h!]
+ \SetAlgoLined 
+ \SetKwInOut{Input}{input}
+\SetKwInOut{Output}{output}
+\caption{Algorithm for computing hash tables \label{algo:comp_ht}}
+ \Input{encoded\_proteins $EP$, 8 encoded\_seeds $S$}
+ \Output{8 hash tables $HT$}
+ \For {each seed $s\in S$}
+ {
+ 	- initialize $ht\in HT$\\
+ 	- \For {each protein $p\in EP$}
+ 	{
+ 		- $temp\_protein\_sequence$ = $p$\\
+ 		- \For {$position\in [0 , (pro\_length - seed\_length + 1)]$}
+ 		{
+			- $s$-mer = $s$ \& $temp\_protein\_sequence$\\
+			- $temp\_protein\_sequence$ shift one position\\
+			- insert\_into\_hash\_table ($s$-mer, $position$, $ht$)
+ 		}
+ 	}
+ }
+\end{algorithm}
+
+\begin{algorithm}[h!]
+ \SetAlgoLined 
+ \SetKwInOut{Input}{input}
+\SetKwInOut{Output}{output}
+\caption{Algorithm for inserting $s$-mer into hash table \label{algo:insert_ht}}
+ \Input{$s$-mer, $s$-mer$\_position$, $hash\_table$}
+ \Output{}
+	position $p$ = $s$-mer \% $hash\_size$ \\
+	\If {$hash\_table[p] == \emptyset$}
+	{
+		insert ($s$-mer, $s$-mer$\_position$) into $hash\_table$[$p$]\\
+	}
+	\ElseIf {$s$-mer $== hash\_table[p].s$-mer}
+	{
+		add ($s$-mer$\_position$) into $hash\_table$[$p$] as a linked list\\
+	}
+	\ElseIf {$s$-mer $\neq hash\_table[p].s$-mer}
+	{
+		insert\_$s$-mer\_into\_hashtable($s$-mer, $p$ + 1, $hash\_table$)\\
+	}
+\end{algorithm}
+
+Once all spaced-mers are stored, for each spaced-mer in the hashtable, all similar spaced-mers are computed and then all hits between the spaced-mer and similar ones are investigated from the table and extended in search for similarities. 
+
+\subsection{Predicting Interactions}
+As previously showed in Figure \ref{fig_SPRINT_workflow}, after obtaining the HSPs, the next step is to predict interactions.
+\subsubsection{Post-processing similarities}
+We first process the similar subsequences we computed in the previous phase to remove those appearing too many times as they are believed to be just repeats that occur very often in the protein sequences without any relevance for the interaction process. We explain the algorithm on the toy example below. For the protein sequence {\tt MVLSPADKTNVKAAWG}, assume we have found the similarities marked by lines in  Figure~\ref{fig_similarities}(a). For example, the top line means that {\tt MVLSP} was found to be similar with another subsequence somewhere else, the bottom line represents the same about the subsequence {\tt KTNVKAAW}, etc. 
+
+\begin{figure}[h!]
+\centering
+\includegraphics{img/fig_similarities.pdf}
+\caption{An example of similarities before (a) and after (b) post-processing.\label{fig_similarities}}
+\end{figure}
+
+The counts in the bottom row indicate how many times each position occurs in all similarities found. (In the figure above, this means the number of lines that cover that position.) All positions with a high count, above a threshold $\Thc$, will be eliminated from all similarities, which will be modified accordingly. In our example, assuming the threshold is 5, positions 3, 4, 8, 9, and 10 have counts 5 or higher and are eliminated; see Figure~\ref{fig_similarities}(b). The new similarities are indicated by the lines above the sequence. For example, {\tt MVLSP} has positions 3 and 4 removed and becomes two similarities, {\tt MV} and {\tt P}. The counterpart of each similarity is modified the same way.
+\subsubsection{Scoring function}
+What we have computed so far are HSPs, that is, pairs of similar subsequences of the same length. We now show how to score an interaction. First, we extend the definition of the score from $k$-mers to arbitrary subsequences of equal length. For two subsequences $X$ and $Y$ of length $n$, the score is given by the sum of the scores of all corresponding $k$-mer pairs; using \eqref{eq_score_kmer}:
+\begin{equation}\label{eq_score_nmer}
+S_e(X,Y) = \sum_{i=1}^{n-k+1}S_\textrm{$k$-mer}(X[i\pp i+k-1],Y[i\pp i+k-1])\ ,
+\end{equation}
+where $X[i\pp j] = X_iX_{i+1}\cdots X_j$. It is important to recall that any two similar sequences we find have the same length, therefore the above scoring function can be used.
+
+Finally, we describe how the scores for whole protein sequences are computed. Initially all scores are set to zero. Each pair of proteins $(P_1, P_2)$ that are known to interact has its own contribution to the scores of other pairs. For each computed similarity $(X_1,Y_1)$ between $P_1$ and another protein $Q_1$ ($X_1$ is a subsequence of $P_1$ and $Y_1$ is a subsequence of $Q_1$) and for each similarity $(X_2,Y_2)$ between $P_2$ and another protein $Q_2$, the score between $Q_1$ and $Q_2$, $S_p(Q_1,Q_2)$, is increased, using \eqref{eq_score_nmer}, by:
+\begin{equation}\label{eq_score_add}
+\begin{array}{l}
+S_p(Q_1,Q_2)\gets S_p(Q_1,Q_2)\\
+
+ + \displaystyle{\frac{S_e(X_1,Y_1)(|X_2|-k+1)+ S_e(X_2,Y_2)(|X_1|-k+1)}{|Q_1||Q_2|}},
+ \end{array}
+\end{equation}
+where $|Q|$ denotes the length of the amino acid sequence $Q$. That means, the score of each corresponding $k$-mer pair between $X_1$ and $Y_1$ is multiplied by the number of $k$-mers in $X_2$, that is, the number of times it is used to support the fact that $Q_1$ is interacting with $Q_2$. Similarly, the score of each corresponding $k$-mer pair between $X_2$ and $Y_2$ is multiplied by the number of $k$-mers in $X_1$. The score obtained this way is then normalized by dividing it by the product of the lengths of the proteins involved. 
+
+Once the score are computed, by considering all given interactions and similar subsequences and computing their impact on the other scores as above, predicting interactions is simply done according to the scores. All protein pairs are sorted decreasingly by the scores; higher scores represent higher probability to interact. If a threshold is provided, then those pairs with scores above the threshold are reported as interacting. 
+
+\subsection{Implementations}
+\subsubsection{Tuneable parameters}
+\label{sec:parameter}
+There are some tuneable parameters (see Table \ref{tab_parameter_SPRINT}) in SPRINT. In general, the default values are tuned experimentally and set based on the human datasets used in \cite{li2017sprint}, so it is recommended to use the default values if PPI prediction is performed on human datasets. The default values for the parameters are $k = 20$, $\Thit = 15$, $\Tsim = 35$, $M=PAM120$, and $\Thc = 40$. These values have been experimentally determined using only Park and Marcotte's data set. All the other datasets have been used exclusively for testing. The program is quite stable, the results being almost unaffected by small variations of these parameters.
+\begin{table}[]
+\begin{adjustwidth}{-2.5cm}{}
+\caption{Tuneable Parameters in SPRINT}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Parameter & Default           & Description                                                        \\ \midrule
+-Thit      & 15        & The similarity threshold to form a hit                             \\
+-Tsim      & 35        & The similarity threshold to form an length-20 HSP                  \\
+-M         & PAM120        & The scoring Matrix used to compute similarity between two subsequences \\
+-Thc       & 40 & The threshold to consider a position high count                    \\ \bottomrule
+\end{tabular}
+\label{tab_parameter_SPRINT}
+\end{adjustwidth}
+\end{table}
+
+\subsubsection{Pseudocode}
+We put all the above together to summarize the SPRINT algorithm for predicting PPIs.
+The input consists of the proteins sequences and PPIs. The default set of seeds is given by $\textsc{Seed}_{4,5}$ above but any set can be used.
+
+
+\smallskip
+
+\noindent
+\setcounter{algccc}{0}
+\underline{$\text{\sc SPRINT}(P_s,P_i)$}\\
+\textbf{input:} protein sequences $P_s$, protein interactions $P_i$\\
+\textbf{global:} seed set $\textsc{Seed}$\\
+\textbf{output:} all protein pairs sorted decreasingly by score\\
+\   [Hash spaced-mers]\\
+\ccc  \textbf{for} each seed $s$ in $\textsc{Seed}$ \textbf{do}\\
+\ccc  \qqa \textbf{for} each protein sequence $p$ in $P_s$ \textbf{do}\\
+\ccc  \qqb \textbf{for} $i$ \textbf{from} $0$ \textbf{to} $|p| - |s|$ \textbf{do}   \\
+\ccc  \qqc $w$ $\gets$ the $s$-mer at position $i$ in $p$\\
+\ccc  \qqc store $w$ in hash table $H_s$\\
+\ccc  \qqc store $i$ in the list of $w$ [pos. where $w$ occurs]\\
+\   [Compute similarities]\\
+\ccc  \textbf{for} each seed $s$ in $\textsc{Seed}$ \textbf{do}\\
+\ccc  \qqa \textbf{for} each $s$-mer $w$ in $H_s$ \textbf{do}\\
+\ccc  \qqb $\textrm{Sim}(w)\gets$ the set of $s$-mers similar with $w$ \eqref{eq:Sim} \\
+\ccc  \qqb \textbf{for} each $z \in \textrm{Sim}(w)$ \textbf{do}\\
+\ccc  \qqc \textbf{for} each position $i$ in the list of $w$ \textbf{do}\\
+\ccc  \qqd \textbf{for} each position $j$ in the list of $z$ \textbf{do}\\
+\ccc  \qqe \textbf{if} $S_\textrm{$k$-mer}(\textrm{$k$-mer}(w),\textrm{$k$-mer}(z)) \ge \Tsim$\\
+\ccc  \qqf \textbf{then} extend the similarity both ways\\
+\ccc  \qqf \phantom{\textbf{then}} store the subsequence pair \\
+\ccc Process similarities: remove pos. with count $\ge\Thc$ \\
+\   [Compute scores]   \\
+\ccc  \textbf{for} each pair $(P,Q) \in P_s\times P_s$ \textbf{do}\\
+\ccc  \qqa $S_p(P,Q) \gets 0$\\
+\ccc  \textbf{for} each $(P_1,P_2)\in P_i$ \textbf{do}   \\
+\ccc  \qqa \textbf{for} each protein $Q_1$ and \\
+\qqd each similarity $(X_1,Y_1)$ in $(P_1,Q_1)$ \textbf{do}   \\
+\ccc  \qqb \textbf{for} each protein $Q_2$ and \\
+\qqe each similarity $(X_2,Y_2)$ in $(P_2,Q_2)$ \textbf{do}   \\
+\ccc  \qqc increase the score $S_p(Q_1,Q_2)$ as in \eqref{eq_score_add}   \\
+\   [Predict PPIs]\\
+\ccc  sort the pairs in $P_s\times P_s$ decreasingly by score   \\
+\ccc  \textbf{if} a threshold is provided  \\
+\ccc  \qqa \textbf{then} output those with score above threshold   \\
+
+
+
+
+
+
+\subsubsection{System configuration}
+The SPRINT program is written in C++ (GCC version 4.8.2) with boost library (version 1.53). The parallel version uses OpenMP library (version 1.8.3). OpenMP is an application program interface that enables programmers to parallel the code from high level. We paralleled the hashtable computation and scoring interactions part to accelerate SPRINT.
 
 \section{Results}
-We have comprehensively compared DELPHI with nine state-of-the-art machine learning based methods. The methods are selected using the following criteria. First, the program is a sequence-based method as sequence information is readily available for most proteins. Second, the program is available in the form of source code or web server. Lastly, the program takes in any input sequence in FASTA format and produces the results on an average-length protein within thirty minutes. Following these criteria, DLpred \cite{zhang2019sequence}, SCRIBER \cite{zhang2019scriber}, SSWRF \cite{wei2016protein}, SPRINT \cite{taherzadeh2016sequence}, CRF-PPI \cite{wei2015cascade}, LORIS \cite{dhole2014sequence}, SPRINGS \cite{singh2014springs}, PSIVER \cite{murakami2010applying}, and SPPIDER \cite{porollo2007prediction} are selected.
+\subsection{Datasets classification}
+Park and Marcotte~\cite{ParkMarcotte12_C123} noticed that all methods have significantly higher performance for the protein pairs in the testing data whose sequences appear also in the training data. Three cases are possible, depending on whether both proteins in the test data appear in training (C1), only one appears (C2), or none (C3). They show that essentially all datasets previously used for cross validation are very close to the C1 type, whereas in the HIPPIE meta-database of human PPIs \cite{Schaefer12_HIPPIE} the C1-type human protein pairs accounts for only 19.2\% of these cases, whereas C2-type and C3-type pairs make up 49.2\% and 31.6\%, respectively. Therefore, testing performed on C1-type data is not expected to generalize well to the full population. The authors proceeded to designing three separate human PPI datasets that follow the C1, C2, and C3-type rules. 
 
-All competing methods are pre-trained using their own training and validation datasets. The most revent two programs, DLPred and SCRIBER, use 5719 and 843 training proteins respectively. The training dataset of DLPred is obtained from CullPDB datasets \cite{wang2003pisces} and further filtered by the authors. The SCRIBER training dataset is originally from the BioLip database. This dataset contains also protein binding information with DNA, RNA, and ligand, which is used by SCRIBER.
-
-All tests have been performed on a Linux (Ubuntu 16.04) machine with 24 CPUs (Intel Xeon v4, 3.00GHz), 256GB memory, and a Nvidia Tesla K40c GPU.
 \subsection{Datasets}
-Five datasets are used in the comparative assessment. Four of them are publicly available dataset from previous studies: Dset\_186 \cite{murakami2010applying}, Dset\_72 \cite{hwang2008protein}, Dset\_164 \cite{dhole2014sequence}, and Dset\_448 \cite{zhang2019scriber}. The first three have been widely used and explored by previous studies while Dset\_448 is more recent. The raw data of Dset\_448 was from the BioLip database \cite{yang2012biolip} where binding sites are defined if the distance between an atom of a residues and an atom of a given protein partner <0.5 \AA{} plus the sum of the Van der Waals radii of the two atoms. The raw data was further processed by the authors of \cite{zhang2019scriber}, removing protein fragments, mapping BioLip sequences to UniProt sequences, clustering so that no similarities above 25\% is shared within the dataset. The number of sequences, binding, non-binding, and the ratio of binding residues are shown in Table \ref{tab_dataset}. The training dataset of DLPred has some overlaps with Dset\_448, therefore we removed 93 proteins in Dset\_448 that share more than 40\% similarities with DLPred training data and formed a reduced testing dataset of 355 proteins (Dset\_355).  According to the PSI-CD-HIT results, the training datasets of DLPred and SCRIBER still contain some proteins that share more than 25\% similarity to Dset\_186,  Dset\_72, and Dset\_164. However, we kept these testing datasets untouched because otherwise we would have to remove too many proteins from them. The training datasets of the competing programs can not be changed because the models are pre-trained. Note that all testing data share less than 25\% similarity to the training dataset of DELPHI. 
+We first describe the procedure of Park and Marcotte~\cite{ParkMarcotte12_C123} in detail. The protein sequences are from UniProt~\cite{uniprot2012reorganizing}. The interactions were downloaded from the protein interaction network analysis platform \cite{Wu09_PINA} that integrates data from six public PPI databases: IntAct \cite{Kerrien07_IntAct}, MINT \cite{Chatr07_MINT}, BioGRID \cite{Stark11_BioGRID}, DIP \cite{Salwinski04_DIP}, HPRD \cite{Prasad09_HPRD} and MIPS MPact \cite{Guldener06_MIPS_MPact}. The datasets were processed by \cite{ParkMarcotte12_C123} as follows. Proteins in each data set were clustered using CD-HIT2~\cite{li2006cd} such that they shared sequence identity less than 40\%. Proteins with less than 50 amino acids as well as homo-dimeric interactions were removed. Negative PPI data were generated by randomly sampling protein pairs that are not known to interact. See \cite{ParkMarcotte12_C123} for more details.
 
-\begin{table*}[htbp]
-    \centering
-    \caption{The datasets used for training, validation, and testing. The first column gives the dataset names. The second column contains the number of proteins in each dataset. The third, fourth, and fifth columns represent the total number of residue, the number of binding, and the number of non-binding residues in each dataset. The last column represents the percentage of the binding residues out of total.}
-    \begin{tabular}{p{12em}rrrrr}
-    \toprule
-    Dataset & Proteins & \multicolumn{3}{c}{Residues} & \multicolumn{1}{c}{\% binding} \\ \cline{3-5}
-    & & total & binding & non-binding & \multicolumn{1}{c}{out of total}\\ \hline
-    Dset\_448 & 448   & 116,500 & 15,810 & 100,690 & 13.57\% \\
-    Dset\_355 & 355   & 95,940 & 11,467 & 84,473 & 11.95\% \\
-    Dset\_186 & 186   & 36,219 & 5,517 & 30,702 & 15.23\% \\
-    Dset\_72 & 72    & 18,140 & 1,923 & 16,217 & 10.60\% \\
-    Dset\_164 & 164   & 33,681 & 6,096 & 27,585 & 18.10\% \\
-    Training + validation & 9,982 & 4,254,198 & 427,687 & 3,826,511 & 10.05\% \\
-    \hline
-    \end{tabular}%
-    \label{tab_dataset}%
-\end{table*}%
-\subsection{Evaluation Scheme}
-Similar to previous studies, we use sensitivity, specificity, precision, accuracy, F1-measure, (F1), Matthews correlation coefficient (MCC), area under the receiver operating characteristic curve (AUROC), and area under the precision-recall (AUPRC) to measure the prediction performance. All programs output a prediction value for each amino acid, and thus the receiver operating characteristic (ROC) curve and the precision-recall (PR) curve can be drawn. AUROC and AUPRC are computed based on the curves using Scikit-learn~\cite{scikit-learn}. We focus more on AUROC and AUPR because they are threshold independent and convey an overall performance measurement of a program. The rest of the metrics are calculated using a binding threshold which is determined after obtaining the prediction scores from each program. Since each program's output is of different scale, for each program, we pick the threshold such that for a given testing dataset, the number of predicted scores above the threshold is equal to the real number of binding sites in the dataset. 
+The total number of proteins used is 20,117, involving 24,718 PPIs. The training and testing datasets are divided into forty splits (from the file human\_random.tar.gz), each consisting of one training file and three testing files, one for each type C1, C2, C3.  Therefore, each C1, C2, or C3 curve produced is the average of forty curves. In addition, they tested also 40-fold cross validation on the entire PPI set. In reality, the ratio between interacting and noninteracting protein pairs is believed to be 1:100 or lower. However, this would make it very slow or impossible to run some of the algorithms. Therefore, Park and Marcotte decided to use ratio 1:1.
 
-The formulas for calculating the metrics are as follows, where true positives ($TP$) and true negatives ($TN$) are the correctly predicted binding sites and non-binding sites, respectively, and false positives ($FP$) and false negative ($FN$) are incorrectly predicted binding sites and non-binding sites, respectively.
-\begin{equation}
-\textit{Sensitivity} = \frac{TP}{TP+FN}
-\end{equation}
+We have used Park and Marcotte's procedure to design similar testing datasets using six other human PPI databases. Among the most widely known human PPI databases we have chosen six that appear to be the most widely used: Biogrid, HPRD, InnateDB (experimentally validated and manually curated PPIs), IntAct, and MINT. We have used 20,160 human protein sequences downloaded from UniProt. The protein sequences and interactions were downloaded in Oct.~2016. We perform four tests for each program on each dataset: 10 fold cross-validation using all PPIs and C1, C2, and C3 tests, the datasets for which are built as explained above, with the ratio between training and testing pairs of 10:1. The details of all datasets are given in Table~\ref{table_datasets}. 
 
-\begin{equation}
-\textit{Specificity} = \frac{TN}{TN+FP}
-\end{equation}
+\begin{table}
+\centering
+\caption[The datasets used for comparing PPI prediction methods]{The datasets used for comparing PPI prediction methods. The second column contains the total number of PPIs, while the third the fourth columns give the number of PPIs used for training and testing, respectively, in the C1, C2, and C3 tests.}
+\label{table_datasets}
+\begin{tabular}{@{}lrrrl@{}}
+\toprule
+Dataset & \multicolumn{3}{c}{PPIs} & Website  \\ \cmidrule{2-4}
+	 & All & Training & Testing &  \\ \midrule
+Park and Marcotte & 24,718 & 14,186 & 1,250 & \texttt{www.marcottelab.org} \\ 
+Biogrid  & 215,029 & 100,000 & 10,000 & \texttt{thebiogrid.org} \\
+HPRD Release 9 & 34,044 & 10,000 & 1,000 & \texttt{www.hprd.org} \\ 
+InnateDB experim.~validated & 165,655 & 65,000 & 6,500 & \texttt{www.innatedb.com} \\ 
+InnateDB manually curated & 9,913 &3,600 & 360 & \texttt{www.innatedb.com} \\ 
+IntAct & 111,744 & 52,500 & 5,250 & \texttt{www.ebi.ac.uk/intact} \\ 
+MINT & 16,914 & 7,000 & 700 & \texttt{mint.bio.uniroma2.it} \\ \bottomrule
+\end{tabular}
+\end{table}
 
-\begin{equation}
-\textit{Precision} = \frac{TP}{TP + FP} 
-\end{equation}
+\subsection{Competing methods}
+We have compared SPRINT with five methods Martin's\cite{Martin05_PPIpred}, Shen's \cite{Shen07_PPIpred}, Guo's\cite{Guo08_PPIpred}, PIPE2\cite{Pitre08_PIPE2}, and Ding's\cite{ding2016predicting}.  Since the three methods do not have names, we use the first author's name to identify them: Martin \cite{Martin05_PPIpred}, Shen \cite{Shen07_PPIpred}, Guo \cite{Guo08_PPIpred}, and Ding \cite{ding2016predicting}.
 
-\begin{equation}
-\textit{Accuracy}=\frac{TP+TN}{TP+FN+TN+FP}
-\end{equation}
+Note that PIPE2 and SPRINT do not require negative training data as they do not use machine learning algorithms. All the other programs require both positive and negative training sets. All programs are trained and tested on the same data, and the results on the testing data are reported. 
 
-\begin{equation}
-F1=2\times \frac{\textit{Sensitivity}\times \textit{Precision}}{\textit{Sensitivity}+\textit{Precision}}
-\end{equation}
+\subsection{Comparative Analysis on Park \& Marcotte’s Datasets}
+We present first the comparison of all five methods considered on the datasets of Park and Marcotte in Figure~\ref{fig_Park_Marcotte_curves}. The receiver operating characteristic (ROC) and precision-recall (PR) curves for the four tests, CV, C1, C2, and C3, are presented. 
 
-\begin{equation}
-MCC\!=\!\frac{TP \times TN - FN \times FP}{\sqrt{(TP\!+\!FP)\!\times\! (TP\!+\!FN)\! \times \!(TN\!+\!FP)\!\times\!(TN\!+\!FN)}}
-\end{equation}
-\subsection{Comparative Analysis on Dset\_448}
-We first compare the DELPHI model with eight programs on Dset\_448. This dataset is the most recently published and has the largest number of proteins, so we emphasize the importance of this dataset. As shown in Table~\ref{tab_comp_448}, DELPHI surpasses competitors in all metrics with an improvement of 3.08\% and 17.4\% on AUROC and AUPR respectively comparing to the second best program SCRIBER.
-
-\begin{table*}[htbp]
-  \centering
-  \caption{Performance comparison of nine programs on Dset\_448. Programs are sorted in asending order by AUPRC. Darker colours represent better results. The evaluation of the programs marked with \** are carried by \cite{zhang2019scriber}.}
-    % Table generated by Excel2LaTeX from sheet 'Sheet2'
-
-    \begin{tabular}{lrrrrrrrr}
-    \toprule
-    \multicolumn{1}{|l}{Predictor} & \multicolumn{1}{c}{Sensitivity} & \multicolumn{1}{c}{Specificity} & \multicolumn{1}{c}{Precision} & \multicolumn{1}{c}{Accuracy} & \multicolumn{1}{c}{F1} & \multicolumn{1}{c}{MCC} & \multicolumn{1}{c}{AUROC} & \multicolumn{1}{c|}{AUPRC} \\
-    \midrule
-    \multicolumn{9}{|c|}{Dset\_448} \\
-    \midrule
-    SPPIDER* & \cellcolor[rgb]{ .933,  .953,  .922}0.202 & 0.870 & \cellcolor[rgb]{ .961,  .973,  .957}0.194 & 0.781 & \cellcolor[rgb]{ .949,  .965,  .937}0.198 & \cellcolor[rgb]{ .957,  .969,  .949}0.071 & 0.517 & 0.159 \\
-    SPRINT* & 0.183 & \cellcolor[rgb]{ .937,  .953,  .925}0.873 & 0.183 & 0.781 & 0.183 & 0.057 & \cellcolor[rgb]{ .839,  .882,  .812}0.570 & \cellcolor[rgb]{ .973,  .98,  .965}0.167 \\
-    PSIVER* & \cellcolor[rgb]{ .973,  .98,  .969}0.191 & \cellcolor[rgb]{ .918,  .937,  .902}0.874 & \cellcolor[rgb]{ .973,  .98,  .969}0.191 & \cellcolor[rgb]{ .973,  .98,  .969}0.783 & \cellcolor[rgb]{ .973,  .98,  .969}0.191 & \cellcolor[rgb]{ .973,  .98,  .969}0.066 & \cellcolor[rgb]{ .808,  .859,  .773}0.581 & \cellcolor[rgb]{ .961,  .973,  .953}0.170 \\
-    SPRINGS* & \cellcolor[rgb]{ .839,  .882,  .808}0.229 & \cellcolor[rgb]{ .745,  .812,  .698}0.882 & \cellcolor[rgb]{ .843,  .886,  .812}0.228 & \cellcolor[rgb]{ .792,  .847,  .753}0.796 & \cellcolor[rgb]{ .839,  .882,  .808}0.229 & \cellcolor[rgb]{ .835,  .878,  .804}0.111 & \cellcolor[rgb]{ .675,  .761,  .612}0.625 & \cellcolor[rgb]{ .843,  .886,  .816}0.201 \\
-    LORIS* & \cellcolor[rgb]{ .714,  .792,  .659}0.264 & \cellcolor[rgb]{ .635,  .733,  .569}0.887 & \cellcolor[rgb]{ .718,  .792,  .663}0.263 & \cellcolor[rgb]{ .667,  .757,  .604}0.805 & \cellcolor[rgb]{ .718,  .792,  .663}0.263 & \cellcolor[rgb]{ .71,  .788,  .655}0.151 & \cellcolor[rgb]{ .58,  .694,  .502}0.656 & \cellcolor[rgb]{ .741,  .812,  .694}0.228 \\
-    CRFPPI* & \cellcolor[rgb]{ .698,  .78,  .643}0.268 & \cellcolor[rgb]{ .635,  .733,  .569}0.887 & \cellcolor[rgb]{ .714,  .792,  .659}0.264 & \cellcolor[rgb]{ .667,  .757,  .604}0.805 & \cellcolor[rgb]{ .706,  .784,  .651}0.266 & \cellcolor[rgb]{ .698,  .78,  .643}0.154 & \cellcolor[rgb]{ .502,  .635,  .412}0.681 & \cellcolor[rgb]{ .706,  .784,  .651}0.238 \\
-    SSWRF* & \cellcolor[rgb]{ .627,  .729,  .561}0.288 & \cellcolor[rgb]{ .549,  .671,  .471}0.891 & \cellcolor[rgb]{ .635,  .733,  .569}0.286 & \cellcolor[rgb]{ .584,  .694,  .506}0.811 & \cellcolor[rgb]{ .631,  .729,  .565}0.287 & \cellcolor[rgb]{ .624,  .725,  .557}0.178 & \cellcolor[rgb]{ .482,  .624,  .388}0.687 & \cellcolor[rgb]{ .639,  .737,  .573}0.256 \\
-    SCRIBER & \cellcolor[rgb]{ .463,  .608,  .365}0.334 & \cellcolor[rgb]{ .443,  .592,  .341}0.896 & \cellcolor[rgb]{ .471,  .612,  .373}0.332 & \cellcolor[rgb]{ .443,  .592,  .341}0.821 & \cellcolor[rgb]{ .467,  .612,  .369}0.333 & \cellcolor[rgb]{ .463,  .608,  .365}0.230 & \cellcolor[rgb]{ .4,  .561,  .29}0.715 & \cellcolor[rgb]{ .522,  .651,  .435}0.287 \\
-    DELPHI & \cellcolor[rgb]{ .329,  .51,  .208}0.371 & \cellcolor[rgb]{ .329,  .51,  .208}0.901 & \cellcolor[rgb]{ .329,  .51,  .208}0.371 & \cellcolor[rgb]{ .329,  .51,  .208}0.829 & \cellcolor[rgb]{ .329,  .51,  .208}0.371 & \cellcolor[rgb]{ .329,  .51,  .208}0.272 & \cellcolor[rgb]{ .329,  .51,  .208}0.737 & \cellcolor[rgb]{ .329,  .51,  .208}0.337 \\
-    \end{tabular}%
-  \label{tab_comp_448}%
-\end{table*}%
-
-In order to have a more comprehensive comparison, we compare DELPHI with another recent sequence-based program, DLPred. However, the training data in DLPred has a big overlap with Dset\_448, so we removed the highly similar sequence in Dset\_448 using the protocol described in section \ref{testing_data} and produced a reduced dataset Dset\_355 which is tested in Section \ref{section_four_tests}. 
-
-\subsection{Comparative Analysis on Dset\_355, Dset\_186, Dset\_164, and Dset\_72}
-To further compare DELPHI with other programs, we used Dset\_355 along with another three previously published datasets: Dset\_186, Dset\_164, and Dset\_72. Since DLPred and SCRIBER are the most recent programs and have been shown to outperform older programs, we compare DELPHI only with SCRIBER and DLPred on the remaining datasets. As shown in Table \ref{tab_ds355_ds186_164_72}, DELPHI clearly outperforms the competitors in all metrics on all datasets it shares the least similarities to the testing datasets. As binding site prediction is a highly imbalanced task, the area under the PR curve is a better indication of the performance as it emphasises more on the minority class and ROC curve pays attention to both minority and the majority class \cite{andluis2016survey}. The AUPR is improved by 18.5\%, 10.0\%, 0.6\%, 10.2\% comparing to the second best program on each dataset. We present also the average values over Dset\_355, Dset\_186, Dset\_164, and Dset\_72 in Table \ref{tab_ds355_ds186_164_72} for each specificity value. The performance of DELPHI again surpasses all competing programs. The average AUPR improvement is 9.7\%.  
-\begin{table*}
-  \centering
-  \caption{Performance comparison of SCRIBER, DLPred, and DELPHI on Dset\_355, Dset\_186, Dset\_164, and Dset\_72. Darker colours represent better results. Each dataset is tested separately using the same metrics. The average metrics of the three datasets is also shown.}
-    \begin{tabular}{|lrrrrrrrr|}
-    \toprule
-    Predictor & \multicolumn{1}{c}{Sensitivity} & \multicolumn{1}{c}{Specificity} & \multicolumn{1}{c}{Precision} & \multicolumn{1}{c}{Accuracy} & \multicolumn{1}{c}{F1} & \multicolumn{1}{c}{MCC} & \multicolumn{1}{c}{AUROC} & \multicolumn{1}{c|}{AUPRC} \\
-    \midrule
-    \multicolumn{9}{|c|}{Dset\_355} \\
-    \midrule
-    SCRIBER & \cellcolor[rgb]{ .835,  .882,  .808}0.322 & \cellcolor[rgb]{ .847,  .886,  .816}0.908 & \cellcolor[rgb]{ .839,  .882,  .808}0.322 & \cellcolor[rgb]{ .847,  .89,  .82}0.838 & \cellcolor[rgb]{ .839,  .882,  .808}0.322 & \cellcolor[rgb]{ .839,  .882,  .808}0.230 & 0.719 & \cellcolor[rgb]{ .961,  .973,  .953}0.275 \\
-    DLPred & 0.308 & 0.906 & 0.308 & 0.835 & 0.308 & 0.214 & \cellcolor[rgb]{ .89,  .922,  .871}0.724 & 0.272 \\
-    DELPHI & \cellcolor[rgb]{ .329,  .51,  .208}0.364 & \cellcolor[rgb]{ .329,  .51,  .208}0.914 & \cellcolor[rgb]{ .329,  .51,  .208}0.364 & \cellcolor[rgb]{ .329,  .51,  .208}0.848 & \cellcolor[rgb]{ .329,  .51,  .208}0.364 & \cellcolor[rgb]{ .329,  .51,  .208}0.278 & \cellcolor[rgb]{ .329,  .51,  .208}0.746 & \cellcolor[rgb]{ .329,  .51,  .208}0.326 \\
-    \midrule
-    \multicolumn{9}{|c|}{Dset\_186} \\
-    \midrule
-    SCRIBER & 0.279 & 0.870 & 0.279 & 0.780 & 0.279 & 0.150 & 0.647 & 0.246 \\
-    DLPred & \cellcolor[rgb]{ .62,  .722,  .549}0.320 & \cellcolor[rgb]{ .631,  .729,  .565}0.878 & \cellcolor[rgb]{ .62,  .722,  .549}0.320 & \cellcolor[rgb]{ .631,  .729,  .561}0.793 & \cellcolor[rgb]{ .62,  .722,  .549}0.320 & \cellcolor[rgb]{ .62,  .722,  .553}0.198 & \cellcolor[rgb]{ .498,  .631,  .404}0.694 & \cellcolor[rgb]{ .6,  .71,  .529}0.290 \\
-    DELPHI & \cellcolor[rgb]{ .329,  .51,  .208}0.351 & \cellcolor[rgb]{ .329,  .51,  .208}0.884 & \cellcolor[rgb]{ .329,  .51,  .208}0.351 & \cellcolor[rgb]{ .329,  .51,  .208}0.803 & \cellcolor[rgb]{ .329,  .51,  .208}0.351 & \cellcolor[rgb]{ .329,  .51,  .208}0.235 & \cellcolor[rgb]{ .329,  .51,  .208}0.710 & \cellcolor[rgb]{ .329,  .51,  .208}0.319 \\
-    \midrule
-    \multicolumn{9}{|c|}{Dset\_164} \\
-    \midrule
-    SCRIBER & 0.327 & 0.851 & 0.327 & 0.756 & 0.327 & 0.179 & 0.657 & 0.301 \\
-    DLPred & \cellcolor[rgb]{ .714,  .792,  .663}0.338 & \cellcolor[rgb]{ .71,  .788,  .659}0.854 & \cellcolor[rgb]{ .714,  .792,  .663}0.338 & \cellcolor[rgb]{ .714,  .788,  .659}0.760 & \cellcolor[rgb]{ .714,  .792,  .663}0.338 & \cellcolor[rgb]{ .714,  .792,  .663}0.192 & \cellcolor[rgb]{ .635,  .733,  .569}0.672 & \cellcolor[rgb]{ .365,  .537,  .251}0.330 \\
-    DELPHI & \cellcolor[rgb]{ .329,  .51,  .208}0.352 & \cellcolor[rgb]{ .329,  .51,  .208}0.857 & \cellcolor[rgb]{ .329,  .51,  .208}0.352 & \cellcolor[rgb]{ .329,  .51,  .208}0.765 & \cellcolor[rgb]{ .329,  .51,  .208}0.352 & \cellcolor[rgb]{ .329,  .51,  .208}0.209 & \cellcolor[rgb]{ .329,  .51,  .208}0.685 & \cellcolor[rgb]{ .329,  .51,  .208}0.332 \\
-    \midrule
-    \multicolumn{9}{|c|}{Dset\_72} \\
-    \midrule
-    SCRIBER & 0.232 & \cellcolor[rgb]{ .612,  .718,  .541}0.909 & 0.232 & \cellcolor[rgb]{ .635,  .733,  .569}0.837 & 0.232 & 0.141 & 0.680 & 0.198 \\
-    DLPred & \cellcolor[rgb]{ .776,  .839,  .737}0.246 & 0.901 & \cellcolor[rgb]{ .776,  .839,  .737}0.246 & 0.826 & \cellcolor[rgb]{ .776,  .839,  .737}0.246 & \cellcolor[rgb]{ .91,  .937,  .894}0.148 & \cellcolor[rgb]{ .82,  .867,  .784}0.688 & \cellcolor[rgb]{ .706,  .784,  .651}0.215 \\
-    DELPHI & \cellcolor[rgb]{ .329,  .51,  .208}0.274 & \cellcolor[rgb]{ .329,  .51,  .208}0.914 & \cellcolor[rgb]{ .329,  .51,  .208}0.274 & \cellcolor[rgb]{ .329,  .51,  .208}0.847 & \cellcolor[rgb]{ .329,  .51,  .208}0.274 & \cellcolor[rgb]{ .329,  .51,  .208}0.189 & \cellcolor[rgb]{ .329,  .51,  .208}0.711 & \cellcolor[rgb]{ .329,  .51,  .208}0.237 \\
-    \midrule
-    \multicolumn{9}{|c|}{Average} \\
-    \midrule
-    SCRIBER & 0.290 & 0.885 & 0.290 & 0.803 & 0.290 & 0.175 & 0.676 & 0.255 \\
-    DLPred & \cellcolor[rgb]{ .812,  .863,  .776}0.303 & \cellcolor[rgb]{ .992,  .992,  .988}0.885 & \cellcolor[rgb]{ .808,  .859,  .773}0.303 & \cellcolor[rgb]{ .976,  .984,  .973}0.803 & \cellcolor[rgb]{ .808,  .863,  .773}0.303 & \cellcolor[rgb]{ .835,  .882,  .804}0.188 & \cellcolor[rgb]{ .659,  .753,  .6}0.695 & \cellcolor[rgb]{ .702,  .784,  .647}0.277 \\
-    DELPHI & \cellcolor[rgb]{ .329,  .51,  .208}0.335 & \cellcolor[rgb]{ .329,  .51,  .208}0.892 & \cellcolor[rgb]{ .329,  .51,  .208}0.335 & \cellcolor[rgb]{ .329,  .51,  .208}0.816 & \cellcolor[rgb]{ .329,  .51,  .208}0.335 & \cellcolor[rgb]{ .329,  .51,  .208}0.227 & \cellcolor[rgb]{ .329,  .51,  .208}0.713 & \cellcolor[rgb]{ .329,  .51,  .208}0.304 \\
-    \bottomrule\label{tab_ds355_ds186_164_72}
-    \end{tabular}%
-\end{table*}%
-
-\subsection{Feature Evaluation}
-We conducted an another experiment to show that all twelve feature are necessary for DELPHI. We pruned one feature each time, and the remaining eleven features are used to train and then evaluate the DELPHI model. As shown in Fig. \ref{fig_remove_each_feature}, the performance decreases with the removal of any feature, showing that there are no redundant features. It is perhaps expected that  removing PSSM creates the biggest performance drop, but our newly introduced features, HSP, ProtVec1D, and Position are shown to be  very useful as well. 
-\begin{figure}[!h]
-\begin{center}
-\includegraphics[height = 7cm, width = 9cm]{img/remove_features_individually_Testing.pdf}
-\caption{The areas under PR curves with the removal of one out of the twelve features on Dset\_448. One feature is removed each time, and the DELPHI model is trained, validated, and tested using the remaining eleven features. The x-axis shows the removed features where 'None' indicates using all twelve features, and the y-axis is the AUPR achieved. The features are sorted by the AUPR values. } \label{fig_remove_each_feature}
-\end{center}
+\begin{figure}[h!]
+\centering
+\includegraphics{img/fig_PM_plots.pdf}
+  \caption[Performance comparison on Park and Marcotte datasets.]{Performance comparison on Park and Marcotte datasets. The ROC curves (top row) and PR curves (bottom row) for CV, C1, C2, and C3 datasets, from left to right. \label{fig_Park_Marcotte_curves}}
 \end{figure}
 
+The prediction performance on CV and C1 is very similar. The performance decreases from C1 to C2 and again to C3, both for ROC and PR curves. This is expected due to the way the datasets are constructed. The ROC curves do not distinguish very well between the prediction performance of the five methods. The difference is more clear in the PR curves. The SPRINT curve is almost always on top, especially at the beginning of the curve, where it matters the most for prediction. Ding's and Martin's are very close for CV and C1 datasets, followed by PIPE2. For C2 and C3 tests, the performance of Ding's and Martin's programs deteriorates and PIPE2 advances in second position.
+\subsection{Comparative Analysis on Seven Human Datasets}
+For a comprehensive comparison, we have compared the top four programs on six datasets, computed as mentioned above from six databases: Biogrid, HPRD Release 9, InnateDB (experimentally validated and manually curated PPIs), IntAct, and MINT. Since the prediction on the CV datasets is similar with C1, we use only C1, C2 and C3 datasets.
+
+For the purpose of predicting new PPIs, the behaviour at high specificity is important. We therefore compare the sensitivity, precision and $F_1$-score for several high specificity values. The table with all values is given in the supplementary material. We present here in Table~\ref{table_cutoff_avg} the average values for each dataset type (C1, C2, and C3) over all datasets for each specificity value. At the bottom of the table we give also the average over all three dataset types. The performance of SPRINT with respect to all three measures, sensitivity, precision, and $F_1$-score is the highest. Only Ding comes close for C1 datasets. the overall average of SPRINT is much higher than Ding's. PIPE2 comes third and Martin last. The performance of PIPE2 decreases much less from C1 to C3 compared with Ding's. It should be noted that a weighted overall average, where the contribution of each dataset type C1,2,3 is proportional with its share of the general population, would place PIPE2 slightly ahead of Ding.
+
+The area under the ROC and PR curves is given in Table~\ref{table_AUC} for all seven datasets, including the C1-, C2-, and C3-average, as well as the overall average across types. Ding is the winner for the C1 tests and SPRINT is the winner for the C2 and C3 tests. In the overall average, SPRINT comes on top. Martin is third and PIPE2 last.
+
+All ROC and PR curves are included in the supplementary material.
+
+\begin{table} 
+  \centering
+  
+\caption[Performance comparison at high specificity]{Performance comparison at high specificity. Sensitivity, precision, and $F_1$-score averages for seven datasets are given for each dataset type C1, C2 and C3, as well as overall averages across types. Darker colours represent better results. The best results are in bold. \label{table_cutoff_avg}} 
+\fontsize{9.5}{8}\selectfont
+\begin{adjustwidth}{-2.5cm}{}
+    \begin{tabular}{|@{}c@{}|@{\ }c@{\ }|cccc|cccc|cccc|}
+    \toprule
+    \multirow{2}[4]{*}{\textbf{Dataset}} & \multirow{2}[4]{*}{\textbf{Specificity}} & \multicolumn{4}{c|}{\textbf{Sensitivity}} & \multicolumn{4}{c|}{\textbf{Precision}} & \multicolumn{4}{c|}{\textbf{F1-score}} \\
+\cmidrule{3-14}          &       & \textbf{$\!\!\!$Martin$\!\!\!$} & \textbf{$\!\!\!$PIPE2$\!\!\!$} & \textbf{$\!\!\!$Ding$\!\!\!$} & \textbf{$\!\!\!$SPRINT$\!\!\!$} & \textbf{$\!\!\!$Martin$\!\!\!$} & \textbf{$\!\!\!$PIPE2$\!\!\!$} & \textbf{$\!\!\!$Ding$\!\!\!$} & \textbf{$\!\!\!$SPRINT$\!\!\!$} & \textbf{$\!\!\!$Martin$\!\!\!$} & \textbf{$\!\!\!$PIPE2$\!\!\!$} & \textbf{$\!\!\!$Ding$\!\!\!$} & \textbf{$\!\!\!$SPRINT$\!\!\!$} \\
+    \midrule
+    \multirow{5}[2]{*}{\begin{tabular}{c}\textbf{C1}\\ \textbf{average}\end{tabular}} & 99.95\% & \cellcolor[rgb]{ .886,  .937,  .855} 6.07 & \cellcolor[rgb]{ .773,  .851,  .722} 7.60 & \cellcolor[rgb]{ .439,  .596,  .337} 11.93 & \cellcolor[rgb]{ .329,  .51,  .208} 13.35 & \cellcolor[rgb]{ .373,  .545,  .259} 98.52 & \cellcolor[rgb]{ .357,  .533,  .239} 98.82 & \cellcolor[rgb]{ .886,  .937,  .855} 88.05 & \cellcolor[rgb]{ .329,  .51,  .208} 99.37 & \cellcolor[rgb]{ .886,  .937,  .855} 11.06 & \cellcolor[rgb]{ .773,  .851,  .722} 13.55 & \cellcolor[rgb]{ .451,  .604,  .349} 20.39 & \cellcolor[rgb]{ .329,  .51,  .208} 22.93 \\
+          & 99.90\% & \cellcolor[rgb]{ .886,  .937,  .855} 6.53 & \cellcolor[rgb]{ .729,  .82,  .675} 9.20 & \cellcolor[rgb]{ .431,  .588,  .325} 14.24 & \cellcolor[rgb]{ .329,  .51,  .208} 15.91 & \cellcolor[rgb]{ .455,  .608,  .353} 97.36 & \cellcolor[rgb]{ .376,  .545,  .263} 98.61 & \cellcolor[rgb]{ .886,  .937,  .855} 90.65 & \cellcolor[rgb]{ .329,  .51,  .208} 99.29 & \cellcolor[rgb]{ .886,  .937,  .855} 11.88 & \cellcolor[rgb]{ .722,  .812,  .663} 16.45 & \cellcolor[rgb]{ .439,  .596,  .333} 24.10 & \cellcolor[rgb]{ .329,  .51,  .208} 27.03 \\
+          & 99.50\% & \cellcolor[rgb]{ .886,  .937,  .855} 17.27 & \cellcolor[rgb]{ .706,  .8,  .643} 21.41 & \cellcolor[rgb]{ .329,  .51,  .208} 29.90 & \cellcolor[rgb]{ .349,  .525,  .231} 29.50 & \cellcolor[rgb]{ .886,  .937,  .855} 96.66 & \cellcolor[rgb]{ .596,  .718,  .518} 97.52 & \cellcolor[rgb]{ .365,  .537,  .247} 98.20 & \cellcolor[rgb]{ .329,  .51,  .208} 98.30 & \cellcolor[rgb]{ .886,  .937,  .855} 28.62 & \cellcolor[rgb]{ .682,  .78,  .62} 34.73 & \cellcolor[rgb]{ .333,  .514,  .212} 45.19 & \cellcolor[rgb]{ .329,  .51,  .208} 45.22 \\
+          & 99.00\% & \cellcolor[rgb]{ .886,  .937,  .855} 25.48 & \cellcolor[rgb]{ .765,  .843,  .714} 28.73 & \cellcolor[rgb]{ .384,  .553,  .271} 38.72 & \cellcolor[rgb]{ .329,  .51,  .208} 40.14 & \cellcolor[rgb]{ .886,  .937,  .855} 95.55 & \cellcolor[rgb]{ .647,  .753,  .576} 96.40 & \cellcolor[rgb]{ .396,  .561,  .286} 97.28 & \cellcolor[rgb]{ .329,  .51,  .208} 97.52 & \cellcolor[rgb]{ .886,  .937,  .855} 39.14 & \cellcolor[rgb]{ .741,  .827,  .686} 43.69 & \cellcolor[rgb]{ .392,  .557,  .278} 54.69 & \cellcolor[rgb]{ .329,  .51,  .208} 56.58 \\
+          & 95.00\% & \cellcolor[rgb]{ .659,  .761,  .588} 55.35 & \cellcolor[rgb]{ .886,  .937,  .855} 48.07 & \cellcolor[rgb]{ .329,  .51,  .208} 65.68 & \cellcolor[rgb]{ .447,  .6,  .345} 62.02 & \cellcolor[rgb]{ .616,  .729,  .537} 91.44 & \cellcolor[rgb]{ .886,  .937,  .855} 90.19 & \cellcolor[rgb]{ .329,  .51,  .208} 92.72 & \cellcolor[rgb]{ .4,  .565,  .29} 92.41 & \cellcolor[rgb]{ .643,  .753,  .573} 68.37 & \cellcolor[rgb]{ .886,  .937,  .855} 62.09 & \cellcolor[rgb]{ .329,  .51,  .208} 76.41 & \cellcolor[rgb]{ .427,  .588,  .322} 73.90 \\
+    \midrule
+    \multirow{5}[2]{*}{\begin{tabular}{c}\textbf{C2}\\ \textbf{average}\end{tabular}} & 99.95\% & \cellcolor[rgb]{ .886,  .937,  .855} 5.55 & \cellcolor[rgb]{ .71,  .804,  .651} 10.65 & \cellcolor[rgb]{ .761,  .839,  .706} 9.22 & \cellcolor[rgb]{ .329,  .51,  .208} 21.45 & \cellcolor[rgb]{ .886,  .937,  .855} 96.33 & \cellcolor[rgb]{ .365,  .537,  .247} 99.42 & \cellcolor[rgb]{ .62,  .733,  .541} 97.92 & \cellcolor[rgb]{ .329,  .51,  .208} 99.62 & \cellcolor[rgb]{ .886,  .937,  .855} 9.78 & \cellcolor[rgb]{ .671,  .773,  .604} 18.91 & \cellcolor[rgb]{ .773,  .851,  .722} 14.69 & \cellcolor[rgb]{ .329,  .51,  .208} 33.16 \\
+          & 99.90\% & \cellcolor[rgb]{ .886,  .937,  .855} 5.88 & \cellcolor[rgb]{ .718,  .808,  .659} 11.28 & \cellcolor[rgb]{ .765,  .843,  .714} 9.78 & \cellcolor[rgb]{ .329,  .51,  .208} 23.40 & \cellcolor[rgb]{ .886,  .937,  .855} 93.66 & \cellcolor[rgb]{ .369,  .541,  .251} 98.96 & \cellcolor[rgb]{ .647,  .753,  .576} 96.11 & \cellcolor[rgb]{ .329,  .51,  .208} 99.34 & \cellcolor[rgb]{ .886,  .937,  .855} 10.40 & \cellcolor[rgb]{ .682,  .78,  .616} 19.98 & \cellcolor[rgb]{ .773,  .851,  .722} 15.70 & \cellcolor[rgb]{ .329,  .51,  .208} 36.08 \\
+          & 99.50\% & \cellcolor[rgb]{ .886,  .937,  .855} 11.73 & \cellcolor[rgb]{ .682,  .78,  .616} 19.52 & \cellcolor[rgb]{ .761,  .839,  .706} 16.59 & \cellcolor[rgb]{ .329,  .51,  .208} 32.73 & \cellcolor[rgb]{ .886,  .937,  .855} 93.86 & \cellcolor[rgb]{ .475,  .62,  .376} 97.11 & \cellcolor[rgb]{ .859,  .914,  .82} 94.11 & \cellcolor[rgb]{ .329,  .51,  .208} 98.22 & \cellcolor[rgb]{ .886,  .937,  .855} 20.17 & \cellcolor[rgb]{ .651,  .757,  .584} 31.86 & \cellcolor[rgb]{ .757,  .839,  .706} 26.59 & \cellcolor[rgb]{ .329,  .51,  .208} 47.77 \\
+          & 99.00\% & \cellcolor[rgb]{ .886,  .937,  .855} 15.03 & \cellcolor[rgb]{ .643,  .753,  .573} 24.93 & \cellcolor[rgb]{ .702,  .796,  .643} 22.55 & \cellcolor[rgb]{ .329,  .51,  .208} 37.60 & \cellcolor[rgb]{ .886,  .937,  .855} 91.85 & \cellcolor[rgb]{ .482,  .627,  .388} 95.64 & \cellcolor[rgb]{ .71,  .804,  .651} 93.52 & \cellcolor[rgb]{ .329,  .51,  .208} 97.07 & \cellcolor[rgb]{ .886,  .937,  .855} 25.26 & \cellcolor[rgb]{ .616,  .729,  .541} 38.84 & \cellcolor[rgb]{ .694,  .788,  .631} 34.94 & \cellcolor[rgb]{ .329,  .51,  .208} 52.97 \\
+          & 95.00\% & \cellcolor[rgb]{ .886,  .937,  .855} 37.41 & \cellcolor[rgb]{ .765,  .843,  .71} 40.95 & \cellcolor[rgb]{ .663,  .765,  .592} 43.83 & \cellcolor[rgb]{ .329,  .51,  .208} 53.17 & \cellcolor[rgb]{ .886,  .937,  .855} 86.45 & \cellcolor[rgb]{ .631,  .741,  .561} 88.43 & \cellcolor[rgb]{ .655,  .757,  .584} 88.27 & \cellcolor[rgb]{ .329,  .51,  .208} 90.76 & \cellcolor[rgb]{ .886,  .937,  .855} 51.17 & \cellcolor[rgb]{ .733,  .82,  .678} 55.33 & \cellcolor[rgb]{ .647,  .753,  .576} 57.69 & \cellcolor[rgb]{ .329,  .51,  .208} 66.18 \\
+    \midrule
+    \multirow{5}[2]{*}{\begin{tabular}{c}\textbf{C3}\\ \textbf{average}\end{tabular}} & 99.95\% & \cellcolor[rgb]{ .886,  .937,  .855} 1.04 & \cellcolor[rgb]{ .847,  .91,  .812} 1.46 & \cellcolor[rgb]{ .851,  .91,  .812} 1.44 & \cellcolor[rgb]{ .329,  .51,  .208} 6.96 & \cellcolor[rgb]{ .663,  .769,  .596} 94.80 & \cellcolor[rgb]{ .761,  .843,  .71} 93.56 & \cellcolor[rgb]{ .886,  .937,  .855} 91.97 & \cellcolor[rgb]{ .329,  .51,  .208} 99.01 & \cellcolor[rgb]{ .886,  .937,  .855} 2.05 & \cellcolor[rgb]{ .847,  .906,  .808} 2.85 & \cellcolor[rgb]{ .851,  .91,  .812} 2.78 & \cellcolor[rgb]{ .329,  .51,  .208} 12.85 \\
+          & 99.90\% & \cellcolor[rgb]{ .886,  .937,  .855} 1.20 & \cellcolor[rgb]{ .843,  .902,  .804} 1.78 & \cellcolor[rgb]{ .851,  .91,  .816} 1.65 & \cellcolor[rgb]{ .329,  .51,  .208} 8.04 & \cellcolor[rgb]{ .635,  .745,  .565} 91.31 & \cellcolor[rgb]{ .706,  .8,  .643} 89.73 & \cellcolor[rgb]{ .886,  .937,  .855} 85.41 & \cellcolor[rgb]{ .329,  .51,  .208} 98.50 & \cellcolor[rgb]{ .886,  .937,  .855} 2.37 & \cellcolor[rgb]{ .839,  .902,  .8} 3.46 & \cellcolor[rgb]{ .851,  .91,  .816} 3.18 & \cellcolor[rgb]{ .329,  .51,  .208} 14.76 \\
+          & 99.50\% & \cellcolor[rgb]{ .886,  .937,  .855} 4.12 & \cellcolor[rgb]{ .867,  .922,  .831} 4.74 & \cellcolor[rgb]{ .859,  .918,  .824} 4.92 & \cellcolor[rgb]{ .329,  .51,  .208} 19.50 & \cellcolor[rgb]{ .859,  .918,  .824} 85.62 & \cellcolor[rgb]{ .694,  .792,  .631} 89.05 & \cellcolor[rgb]{ .886,  .937,  .855} 85.01 & \cellcolor[rgb]{ .329,  .51,  .208} 96.63 & \cellcolor[rgb]{ .886,  .937,  .855} 7.83 & \cellcolor[rgb]{ .863,  .918,  .827} 8.96 & \cellcolor[rgb]{ .859,  .918,  .824} 9.03 & \cellcolor[rgb]{ .329,  .51,  .208} 31.65 \\
+          & 99.00\% & \cellcolor[rgb]{ .875,  .929,  .839} 7.40 & \cellcolor[rgb]{ .796,  .867,  .749} 9.89 & \cellcolor[rgb]{ .886,  .937,  .855} 6.92 & \cellcolor[rgb]{ .329,  .51,  .208} 24.81 & \cellcolor[rgb]{ .851,  .91,  .812} 83.64 & \cellcolor[rgb]{ .678,  .776,  .612} 87.41 & \cellcolor[rgb]{ .886,  .937,  .855} 82.80 & \cellcolor[rgb]{ .329,  .51,  .208} 94.99 & \cellcolor[rgb]{ .867,  .922,  .831} 13.51 & \cellcolor[rgb]{ .784,  .859,  .737} 17.32 & \cellcolor[rgb]{ .886,  .937,  .855} 12.48 & \cellcolor[rgb]{ .329,  .51,  .208} 38.32 \\
+          & 95.00\% & \cellcolor[rgb]{ .867,  .922,  .831} 24.82 & \cellcolor[rgb]{ .776,  .851,  .725} 27.35 & \cellcolor[rgb]{ .886,  .937,  .855} 24.18 & \cellcolor[rgb]{ .329,  .51,  .208} 39.79 & \cellcolor[rgb]{ .886,  .937,  .855} 80.99 & \cellcolor[rgb]{ .769,  .847,  .718} 82.36 & \cellcolor[rgb]{ .878,  .929,  .843} 81.13 & \cellcolor[rgb]{ .329,  .51,  .208} 87.38 & \cellcolor[rgb]{ .859,  .918,  .824} 37.59 & \cellcolor[rgb]{ .773,  .851,  .722} 40.28 & \cellcolor[rgb]{ .886,  .937,  .855} 36.73 & \cellcolor[rgb]{ .329,  .51,  .208} 53.82 \\
+    \midrule
+    \multirow{5}[2]{*}{\begin{tabular}{c}\textbf{Overall}\\ \textbf{AVERAGE}\end{tabular}} & 99.95\% & \cellcolor[rgb]{ .886,  .937,  .855} 4.22 & \cellcolor[rgb]{ .753,  .835,  .702} 6.57 & \cellcolor[rgb]{ .698,  .792,  .635} 7.53 & \cellcolor[rgb]{ .329,  .51,  .208} 13.92 & \cellcolor[rgb]{ .565,  .69,  .478} 96.55 & \cellcolor[rgb]{ .502,  .643,  .408} 97.27 & \cellcolor[rgb]{ .886,  .937,  .855} 92.65 & \cellcolor[rgb]{ .329,  .51,  .208} 99.33 & \cellcolor[rgb]{ .886,  .937,  .855} 7.63 & \cellcolor[rgb]{ .737,  .824,  .682} 11.77 & \cellcolor[rgb]{ .706,  .8,  .647} 12.62 & \cellcolor[rgb]{ .329,  .51,  .208} 22.98 \\
+          & 99.90\% & \cellcolor[rgb]{ .886,  .937,  .855} 4.54 & \cellcolor[rgb]{ .745,  .831,  .69} 7.42 & \cellcolor[rgb]{ .69,  .788,  .627} 8.56 & \cellcolor[rgb]{ .329,  .51,  .208} 15.79 & \cellcolor[rgb]{ .663,  .765,  .592} 94.11 & \cellcolor[rgb]{ .549,  .678,  .463} 95.77 & \cellcolor[rgb]{ .886,  .937,  .855} 90.73 & \cellcolor[rgb]{ .329,  .51,  .208} 99.04 & \cellcolor[rgb]{ .886,  .937,  .855} 8.22 & \cellcolor[rgb]{ .729,  .816,  .671} 13.30 & \cellcolor[rgb]{ .698,  .792,  .635} 14.33 & \cellcolor[rgb]{ .329,  .51,  .208} 25.96 \\
+          & 99.50\% & \cellcolor[rgb]{ .886,  .937,  .855} 11.04 & \cellcolor[rgb]{ .745,  .827,  .69} 15.23 & \cellcolor[rgb]{ .678,  .776,  .612} 17.14 & \cellcolor[rgb]{ .329,  .51,  .208} 27.24 & \cellcolor[rgb]{ .886,  .937,  .855} 92.05 & \cellcolor[rgb]{ .643,  .749,  .569} 94.56 & \cellcolor[rgb]{ .851,  .91,  .812} 92.44 & \cellcolor[rgb]{ .329,  .51,  .208} 97.71 & \cellcolor[rgb]{ .886,  .937,  .855} 18.87 & \cellcolor[rgb]{ .733,  .82,  .678} 25.18 & \cellcolor[rgb]{ .69,  .788,  .627} 26.94 & \cellcolor[rgb]{ .329,  .51,  .208} 41.54 \\
+          & 99.00\% & \cellcolor[rgb]{ .886,  .937,  .855} 15.97 & \cellcolor[rgb]{ .729,  .816,  .671} 21.19 & \cellcolor[rgb]{ .682,  .78,  .616} 22.73 & \cellcolor[rgb]{ .329,  .51,  .208} 34.18 & \cellcolor[rgb]{ .886,  .937,  .855} 90.35 & \cellcolor[rgb]{ .635,  .745,  .565} 93.15 & \cellcolor[rgb]{ .812,  .878,  .769} 91.20 & \cellcolor[rgb]{ .329,  .51,  .208} 96.52 & \cellcolor[rgb]{ .886,  .937,  .855} 25.97 & \cellcolor[rgb]{ .714,  .804,  .655} 33.28 & \cellcolor[rgb]{ .694,  .792,  .631} 34.04 & \cellcolor[rgb]{ .329,  .51,  .208} 49.29 \\
+          & 95.00\% & \cellcolor[rgb]{ .871,  .925,  .835} 39.19 & \cellcolor[rgb]{ .886,  .937,  .855} 38.79 & \cellcolor[rgb]{ .639,  .749,  .565} 44.56 & \cellcolor[rgb]{ .329,  .51,  .208} 51.66 & \cellcolor[rgb]{ .886,  .937,  .855} 86.30 & \cellcolor[rgb]{ .788,  .863,  .741} 86.99 & \cellcolor[rgb]{ .733,  .82,  .678} 87.37 & \cellcolor[rgb]{ .329,  .51,  .208} 90.18 & \cellcolor[rgb]{ .886,  .937,  .855} 52.38 & \cellcolor[rgb]{ .878,  .933,  .847} 52.57 & \cellcolor[rgb]{ .682,  .78,  .616} 56.94 & \cellcolor[rgb]{ .329,  .51,  .208} 64.63 \\
+    \bottomrule
+    \end{tabular}%
+    \end{adjustwidth}
+\end{table}%
+
+
+
+\begin{table}[] 
+%   \centering
+\caption[Area under curves]{Area under curves. AUROC and AUPR curves are given for seven datasets and three types, C1, C2, C3, for each, as well as averages for each type and overall average across types. Darker colours represent better results. The best results are in bold. \label{table_AUC}} 
+    \begin{tabular}{|c|cccc|cccc|}
+    \toprule
+    \multirow{3}[6]{*}{\textbf{Dataset}} & \multicolumn{4}{c|}{\textbf{AUROC}} & \multicolumn{4}{c|}{\textbf{AUPR}} \\
+\cmidrule{2-9}          & \textbf{$\!\!\!$Martin$\!\!\!$} & \textbf{$\!\!\!$PIPE2$\!\!\!$} & \textbf{$\!\!\!$Ding$\!\!\!$} & \textbf{$\!\!\!$SPRINT$\!\!\!$} & \textbf{$\!\!\!$Martin$\!\!\!$} & \textbf{$\!\!\!$PIPE2$\!\!\!$} & \textbf{$\!\!\!$Ding$\!\!\!$} & \textbf{$\!\!\!$SPRINT$\!\!\!$} \\
+\cmidrule{2-9}          & \multicolumn{8}{c|}{\textbf{C1}} \\
+    \midrule
+    \textbf{Biogrid} & \cellcolor[rgb]{ .549,  .678,  .463} 87.54 & \cellcolor[rgb]{ .886,  .937,  .855} 79.01 & \cellcolor[rgb]{ .329,  .51,  .208} 93.06 & \cellcolor[rgb]{ .529,  .663,  .439} 88.11 & \cellcolor[rgb]{ .592,  .714,  .514} 87.20 & \cellcolor[rgb]{ .886,  .937,  .855} 80.52 & \cellcolor[rgb]{ .329,  .51,  .208} 93.08 & \cellcolor[rgb]{ .502,  .643,  .408} 89.24 \\
+    \textbf{HPRD} & \cellcolor[rgb]{ .51,  .651,  .42} 86.83 & \cellcolor[rgb]{ .886,  .937,  .855} 81.53 & \cellcolor[rgb]{ .329,  .51,  .208} 89.34 & \cellcolor[rgb]{ .514,  .655,  .424} 86.76 & \cellcolor[rgb]{ .639,  .749,  .569} 86.93 & \cellcolor[rgb]{ .886,  .937,  .855} 84.31 & \cellcolor[rgb]{ .329,  .51,  .208} 90.20 & \cellcolor[rgb]{ .416,  .576,  .306} 89.32 \\
+    \textbf{Innate\_Exp} & \cellcolor[rgb]{ .537,  .671,  .451} 90.18 & \cellcolor[rgb]{ .886,  .937,  .855} 83.98 & \cellcolor[rgb]{ .329,  .51,  .208} 93.83 & \cellcolor[rgb]{ .471,  .62,  .373} 91.34 & \cellcolor[rgb]{ .576,  .702,  .494} 90.31 & \cellcolor[rgb]{ .886,  .937,  .855} 85.48 & \cellcolor[rgb]{ .329,  .51,  .208} 94.14 & \cellcolor[rgb]{ .455,  .604,  .353} 92.25 \\
+    \textbf{Innate\_Man} & \cellcolor[rgb]{ .424,  .584,  .318} 94.11 & \cellcolor[rgb]{ .886,  .937,  .855} 90.26 & \cellcolor[rgb]{ .329,  .51,  .208} 94.89 & \cellcolor[rgb]{ .549,  .678,  .463} 93.09 & \cellcolor[rgb]{ .459,  .608,  .357} 94.93 & \cellcolor[rgb]{ .886,  .937,  .855} 92.22 & \cellcolor[rgb]{ .329,  .51,  .208} 95.73 & \cellcolor[rgb]{ .486,  .631,  .392} 94.75 \\
+    \textbf{IntAct} & \cellcolor[rgb]{ .533,  .667,  .443} 88.02 & \cellcolor[rgb]{ .886,  .937,  .855} 80.72 & \cellcolor[rgb]{ .329,  .51,  .208} 92.18 & \cellcolor[rgb]{ .502,  .643,  .408} 88.69 & \cellcolor[rgb]{ .584,  .706,  .502} 87.51 & \cellcolor[rgb]{ .886,  .937,  .855} 81.68 & \cellcolor[rgb]{ .329,  .51,  .208} 92.31 & \cellcolor[rgb]{ .467,  .616,  .369} 89.71 \\
+    \textbf{MINT} & \cellcolor[rgb]{ .478,  .624,  .38} 90.86 & \cellcolor[rgb]{ .886,  .937,  .855} 83.41 & \cellcolor[rgb]{ .329,  .51,  .208} 93.54 & \cellcolor[rgb]{ .58,  .702,  .498} 89.03 & \cellcolor[rgb]{ .537,  .671,  .451} 91.08 & \cellcolor[rgb]{ .886,  .937,  .855} 85.93 & \cellcolor[rgb]{ .329,  .51,  .208} 94.11 & \cellcolor[rgb]{ .533,  .667,  .447} 91.13 \\
+    \textbf{Park \& Marcotte} & \cellcolor[rgb]{ .416,  .576,  .31} 81.49 & \cellcolor[rgb]{ .886,  .937,  .855} 76.74 & \cellcolor[rgb]{ .365,  .537,  .251} 82.00 & \cellcolor[rgb]{ .329,  .51,  .208} 82.35 & \cellcolor[rgb]{ .643,  .749,  .573} 82.32 & \cellcolor[rgb]{ .886,  .937,  .855} 79.90 & \cellcolor[rgb]{ .573,  .698,  .49} 83.00 & \cellcolor[rgb]{ .329,  .51,  .208} 85.39 \\
+    \midrule
+          & \multicolumn{8}{c|}{\textbf{C2}} \\
+    \midrule
+    \textbf{Biogrid} & \cellcolor[rgb]{ .627,  .737,  .553} 81.33 & \cellcolor[rgb]{ .886,  .937,  .855} 76.66 & \cellcolor[rgb]{ .329,  .51,  .208} 86.57 & \cellcolor[rgb]{ .439,  .592,  .333} 84.67 & \cellcolor[rgb]{ .714,  .808,  .655} 80.76 & \cellcolor[rgb]{ .886,  .937,  .855} 78.25 & \cellcolor[rgb]{ .345,  .522,  .224} 86.12 & \cellcolor[rgb]{ .329,  .51,  .208} 86.30 \\
+    \textbf{HPRD} & \cellcolor[rgb]{ .675,  .776,  .608} 83.30 & \cellcolor[rgb]{ .886,  .937,  .855} 81.55 & \cellcolor[rgb]{ .49,  .635,  .396} 84.78 & \cellcolor[rgb]{ .329,  .51,  .208} 86.09 & \cellcolor[rgb]{ .886,  .937,  .855} 82.85 & \cellcolor[rgb]{ .773,  .851,  .725} 83.98 & \cellcolor[rgb]{ .686,  .784,  .624} 84.85 & \cellcolor[rgb]{ .329,  .51,  .208} 88.37 \\
+    \textbf{Innate\_Exp} & \cellcolor[rgb]{ .71,  .804,  .651} 83.96 & \cellcolor[rgb]{ .886,  .937,  .855} 81.46 & \cellcolor[rgb]{ .424,  .584,  .318} 87.98 & \cellcolor[rgb]{ .329,  .51,  .208} 89.31 & \cellcolor[rgb]{ .804,  .875,  .761} 83.74 & \cellcolor[rgb]{ .886,  .937,  .855} 82.57 & \cellcolor[rgb]{ .506,  .647,  .416} 87.91 & \cellcolor[rgb]{ .329,  .51,  .208} 90.37 \\
+    \textbf{Innate\_Man} & \cellcolor[rgb]{ .639,  .749,  .565} 85.87 & \cellcolor[rgb]{ .886,  .937,  .855} 84.43 & \cellcolor[rgb]{ .835,  .898,  .796} 84.74 & \cellcolor[rgb]{ .329,  .51,  .208} 87.64 & \cellcolor[rgb]{ .784,  .859,  .733} 87.71 & \cellcolor[rgb]{ .867,  .922,  .831} 87.22 & \cellcolor[rgb]{ .886,  .937,  .855} 87.10 & \cellcolor[rgb]{ .329,  .51,  .208} 90.33 \\
+    \textbf{IntAct} & \cellcolor[rgb]{ .608,  .722,  .529} 81.68 & \cellcolor[rgb]{ .886,  .937,  .855} 77.64 & \cellcolor[rgb]{ .329,  .51,  .208} 85.63 & \cellcolor[rgb]{ .506,  .643,  .412} 83.14 & \cellcolor[rgb]{ .725,  .816,  .671} 80.68 & \cellcolor[rgb]{ .886,  .937,  .855} 78.69 & \cellcolor[rgb]{ .361,  .533,  .243} 85.20 & \cellcolor[rgb]{ .329,  .51,  .208} 85.58 \\
+    \textbf{MINT} & \cellcolor[rgb]{ .384,  .553,  .271} 86.66 & \cellcolor[rgb]{ .886,  .937,  .855} 81.76 & \cellcolor[rgb]{ .329,  .51,  .208} 87.17 & \cellcolor[rgb]{ .431,  .588,  .325} 86.20 & \cellcolor[rgb]{ .6,  .718,  .522} 86.37 & \cellcolor[rgb]{ .886,  .937,  .855} 84.08 & \cellcolor[rgb]{ .459,  .608,  .357} 87.47 & \cellcolor[rgb]{ .329,  .51,  .208} 88.47 \\
+    \textbf{Park \& Marcotte} & \cellcolor[rgb]{ .82,  .886,  .776} 60.67 & \cellcolor[rgb]{ .51,  .647,  .416} 63.76 & \cellcolor[rgb]{ .886,  .937,  .855} 60.00 & \cellcolor[rgb]{ .329,  .51,  .208} 65.52 & \cellcolor[rgb]{ .867,  .922,  .831} 60.43 & \cellcolor[rgb]{ .486,  .631,  .388} 67.41 & \cellcolor[rgb]{ .886,  .937,  .855} 60.00 & \cellcolor[rgb]{ .329,  .51,  .208} 70.25 \\
+    \midrule
+          & \multicolumn{8}{c|}{\textbf{C3}} \\
+    \midrule
+    \textbf{Biogrid} & \cellcolor[rgb]{ .565,  .69,  .482} 76.20 & \cellcolor[rgb]{ .886,  .937,  .855} 71.38 & \cellcolor[rgb]{ .365,  .537,  .251} 79.16 & \cellcolor[rgb]{ .329,  .51,  .208} 79.67 & \cellcolor[rgb]{ .639,  .749,  .565} 74.89 & \cellcolor[rgb]{ .886,  .937,  .855} 70.25 & \cellcolor[rgb]{ .51,  .651,  .42} 77.24 & \cellcolor[rgb]{ .329,  .51,  .208} 80.59 \\
+    \textbf{HPRD} & \cellcolor[rgb]{ .678,  .776,  .612} 79.46 & \cellcolor[rgb]{ .886,  .937,  .855} 77.14 & \cellcolor[rgb]{ .855,  .914,  .816} 77.51 & \cellcolor[rgb]{ .329,  .51,  .208} 83.27 & \cellcolor[rgb]{ .706,  .8,  .647} 78.51 & \cellcolor[rgb]{ .718,  .808,  .659} 78.28 & \cellcolor[rgb]{ .886,  .937,  .855} 75.32 & \cellcolor[rgb]{ .329,  .51,  .208} 85.08 \\
+    \textbf{Innate\_Exp} & \cellcolor[rgb]{ .765,  .843,  .71} 78.10 & \cellcolor[rgb]{ .886,  .937,  .855} 75.89 & \cellcolor[rgb]{ .616,  .729,  .541} 80.69 & \cellcolor[rgb]{ .329,  .51,  .208} 85.70 & \cellcolor[rgb]{ .784,  .859,  .733} 76.65 & \cellcolor[rgb]{ .886,  .937,  .855} 74.42 & \cellcolor[rgb]{ .694,  .788,  .631} 78.55 & \cellcolor[rgb]{ .329,  .51,  .208} 86.23 \\
+    \textbf{Innate\_Man} & \cellcolor[rgb]{ .584,  .706,  .502} 71.75 & \cellcolor[rgb]{ .506,  .647,  .412} 73.25 & \cellcolor[rgb]{ .886,  .937,  .855} 65.96 & \cellcolor[rgb]{ .329,  .51,  .208} 76.57 & \cellcolor[rgb]{ .612,  .725,  .533} 73.49 & \cellcolor[rgb]{ .549,  .678,  .463} 74.95 & \cellcolor[rgb]{ .886,  .937,  .855} 66.81 & \cellcolor[rgb]{ .329,  .51,  .208} 80.17 \\
+    \textbf{IntAct} & \cellcolor[rgb]{ .533,  .667,  .443} 76.94 & \cellcolor[rgb]{ .886,  .937,  .855} 73.61 & \cellcolor[rgb]{ .329,  .51,  .208} 78.81 & \cellcolor[rgb]{ .8,  .871,  .753} 74.44 & \cellcolor[rgb]{ .69,  .788,  .627} 74.88 & \cellcolor[rgb]{ .886,  .937,  .855} 73.11 & \cellcolor[rgb]{ .561,  .686,  .475} 76.03 & \cellcolor[rgb]{ .329,  .51,  .208} 78.08 \\
+    \textbf{MINT} & \cellcolor[rgb]{ .49,  .635,  .396} 81.25 & \cellcolor[rgb]{ .886,  .937,  .855} 78.06 & \cellcolor[rgb]{ .78,  .855,  .729} 78.94 & \cellcolor[rgb]{ .329,  .51,  .208} 82.54 & \cellcolor[rgb]{ .667,  .769,  .6} 80.07 & \cellcolor[rgb]{ .729,  .816,  .671} 79.28 & \cellcolor[rgb]{ .886,  .937,  .855} 77.14 & \cellcolor[rgb]{ .329,  .51,  .208} 84.55 \\
+    \textbf{Park \& Marcotte} & \cellcolor[rgb]{ .757,  .835,  .702} 57.86 & \cellcolor[rgb]{ .596,  .714,  .514} 58.90 & \cellcolor[rgb]{ .886,  .937,  .855} 57.00 & \cellcolor[rgb]{ .329,  .51,  .208} 60.60 & \cellcolor[rgb]{ .808,  .878,  .765} 57.07 & \cellcolor[rgb]{ .604,  .722,  .525} 59.84 & \cellcolor[rgb]{ .886,  .937,  .855} 56.00 & \cellcolor[rgb]{ .329,  .51,  .208} 63.49 \\
+    \midrule
+          & \multicolumn{8}{c|}{\textbf{AVERAGES}} \\
+    \midrule
+    \textbf{C1 average} & \cellcolor[rgb]{ .506,  .647,  .412} 88.43 & \cellcolor[rgb]{ .886,  .937,  .855} 82.24 & \cellcolor[rgb]{ .329,  .51,  .208} 91.26 & \cellcolor[rgb]{ .502,  .643,  .408} 88.48 & \cellcolor[rgb]{ .569,  .694,  .486} 88.61 & \cellcolor[rgb]{ .886,  .937,  .855} 84.29 & \cellcolor[rgb]{ .329,  .51,  .208} 91.80 & \cellcolor[rgb]{ .447,  .6,  .341} 90.26 \\
+\cmidrule{1-1}    \textbf{C2 average} & \cellcolor[rgb]{ .631,  .741,  .561} 80.50 & \cellcolor[rgb]{ .886,  .937,  .855} 78.18 & \cellcolor[rgb]{ .42,  .58,  .314} 82.41 & \cellcolor[rgb]{ .329,  .51,  .208} 83.23 & \cellcolor[rgb]{ .882,  .937,  .851} 80.36 & \cellcolor[rgb]{ .886,  .937,  .855} 80.32 & \cellcolor[rgb]{ .643,  .753,  .573} 82.67 & \cellcolor[rgb]{ .329,  .51,  .208} 85.67 \\
+\cmidrule{1-1}    \textbf{C3 average} & \cellcolor[rgb]{ .675,  .773,  .608} 74.51 & \cellcolor[rgb]{ .886,  .937,  .855} 72.60 & \cellcolor[rgb]{ .729,  .816,  .671} 74.01 & \cellcolor[rgb]{ .329,  .51,  .208} 77.54 & \cellcolor[rgb]{ .796,  .867,  .749} 73.65 & \cellcolor[rgb]{ .855,  .914,  .82} 72.88 & \cellcolor[rgb]{ .886,  .937,  .855} 72.44 & \cellcolor[rgb]{ .329,  .51,  .208} 79.74 \\
+    \midrule
+    \textbf{Overall AVERAGE} & \cellcolor[rgb]{ .529,  .667,  .443} 81.15 & \cellcolor[rgb]{ .886,  .937,  .855} 77.67 & \cellcolor[rgb]{ .384,  .553,  .271} 82.56 & \cellcolor[rgb]{ .329,  .51,  .208} 83.08 & \cellcolor[rgb]{ .729,  .82,  .675} 80.87 & \cellcolor[rgb]{ .886,  .937,  .855} 79.16 & \cellcolor[rgb]{ .6,  .718,  .522} 82.30 & \cellcolor[rgb]{ .329,  .51,  .208} 85.22 \\
+    \bottomrule
+    \end{tabular}%
+\end{table}%
+\subsection{Comparative Analysis on Human Interactome Prediction}
+The goal of all PPI prediction methods is to predict new interactions from existing reliable ones. That means, in practice we input all known interactions -- the entire interactome of an organism -- and predict new ones. Of the newly predicted interactions, only those that are the most likely to be true interactions are kept. 
+
+For predicting the entire interactome, we need to predict the probability of interaction between any two proteins. Recall that for $P$ proteins, that means we need to consider $(1+P)\times P\div2$ protein pairs. For our 20,160 proteins, that is about 203 million potential interactions. %; 203,222,880
+For example, predicting one pair per second results in over six years of computation time. 
+
+We have tested the four programs, Martin's, PIPE2, Ding's, and SPRINT, on the entire human interactome, considering as given PPIs each of the six datasets in Table~\ref{table_datasets}. The tests were performed on a DELL PowerEdge R620 computer with 12 cores Intel Xeon at 2.0 GHz and 256 GB of RAM, running Linux Red Hat, CentOS 6.3. 
+
+The time and memory values are shown in Table~\ref{table_interactome_time} for all three stages: preprocessing, training, and predicting. For each dataset, training is performed on all PPIs in that dataset and then predictions are made for all 203 million protein pairs. 
+
+Note that PIPE2 and SPRINT do not require any training. Also, preprocessing is performed only once for all protein sequences. As long as no protein sequences are added, no preprocessing needs to be done. For SPRINT, we provide all necessary similarities for all reviewed human proteins in UniProt. If new protein sequences are added, the program has an option (``\texttt{-add}'') that is able to compute only the new similarities, which is very fast.
+
+Therefore, the comparison is between predicting time of PIPE2 and SPRINT and training plus predicting time of Martin and Ding. PIPE2 and Martin are very slow and the predicting times are estimated by running the programs for 100 hours and then estimating according to the number of protein pairs left to process. Both take too long to be used on the entire human interactome.
+
+Ding's program is faster than the other two but uses a large amount of memory. It ran out of 256GB of memory when training on the two largest datasets: Biogrid and InnateDB experimentally validated. It seems able to train on the IntAct dataset but it could not finish training in 14 days, which is the longest we can run a job on our system.
+
+SPRINT is approximately five orders of magnitude faster than PIPE2 and Martin. It is over two orders of magnitude faster than Ding but this is based on the small datasets. The results on IntAct seem to indicate that the difference increases for large datasets. 
+
+Another interesting property of SPRINT is that it appears to scale sublinearly with the size of the datasets, that is, the larger the datasets, the faster it runs (per PPI). This means SPRINT will continue to be fast as the datasets will grow, which it is to be expected.
+
+It should be noted that SPRINT runs in parallel whereas the other are serial. Martin's and PIPE2 are much slower, so parallelizing the prediction would not make any difference. Ding's program on the other hand uses a considerable amout of time for training, which cannot be easily parallelized. The very large difference in speed is due to the fact that while Martin, PIPE2, and Ding consider one protein pair at the time, out of the 203 million, SPRINT simply computes all 203 million scores at the same time; see the Methods section for details.
+
+In terms of memory, SPRINT requires a very modest amount of memory to predict. We successfully ran SPRINT on all entire human interactome tests in serial mode on an older MacBook (1.4GHz processor, 4 GB RAM); the running time was between 35 minutes for Innate manually curated to 11 hours for Biogriod. 
+
+The comparison is more visually clear in Figure~\ref{fig_time_memory} where the time (in hours) and memory are plotted together for the four programs compared and those datasets for which we have either a value or at least an estimate. Note the logarithmic scale for time. The point with the highest memory for Ding's program (for the IntAct dataset) has time value fourteen days, which is the only lower bound we have. The real time may be  much larger. 
+
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=8.5cm]{img/fig_time_memory.pdf}
+\caption{Time and memory comparison for predicting the entire human interactome. \label{fig_time_memory}}
+\end{figure}
+
+\begin{table}[!h!] 
+\centering
+\caption[Human interactome comparison]{Human interactome comparison: running time and peak memory. The predicting time for Martin's and PIPE2 was estimated by running it for 100 hours and then estimating the total time according to the number of pairs left to predict. Note that PIPE2 and SPRINT do not require training as they are not using machine learning. For the entries marked with a dash, the program ran out of (256 GB) memory or ran for more than 14 days. Times marked with a dagger${}^\dag$ are estimated.\label{table_interactome_time}}
+\begin{tabular}{@{}llrrrrrr@{}} \toprule
+Dataset & Program & \multicolumn{3}{c}{Time (s)} &  \multicolumn{3}{|c}{Memory (GB)}   \\ \cmidrule{3-5} \cmidrule{6-8}
+ &	& Preprocess & Train & Predict &  Preprocess & Train & Predict \\ \midrule
+Biogrid & %%%%%%%%%%%%%%%%%%%%%%%%
+	Martin & 32,400 & $>$ 1,209,600  & {\scriptsize  -- } & 2.5 & 6.1 & {\scriptsize  -- } \\ 
+&	PIPE2 & 312,120 & {\scriptsize N$\!$/$\!$A} & ${}^\dag$1,150,675,200 & 2.1 & {\scriptsize N$\!$/$\!$A} & 18.9\\ 
+&	Ding	   & 37,708 & {\scriptsize  -- } & {\scriptsize  -- }  & 3.3 &  $>$ 256 & {\scriptsize  -- }\\
+&	SPRINT & 105,480 & {\scriptsize N$\!$/$\!$A} & 6,120 & 11.2 & {\scriptsize N$\!$/$\!$A} & 3.0 \\ \midrule
+HPRD  & %%%%%%%%%%%%%%%%%%%%%%%% 
+	Martin & 32,400 & 584,640 & ${}^\dag$107,222,400  & 2.5 & 3.2 & 1.5 \\ 
+Release 9 &	PIPE2 & 312,120 & {\scriptsize N$\!$/$\!$A} & ${}^\dag$435,628,800 &  2.1 & {\scriptsize N$\!$/$\!$A} & 18.9 \\ 
+&	Ding	   & 37,708 & 236,551 & 374,360 & 3.3 & 79.5 & 79.5\\
+&	SPRINT & 105,480 & {\scriptsize N$\!$/$\!$A} & 1,257 & 11.2 & {\scriptsize N$\!$/$\!$A} & 3.0 \\ \midrule
+Innate   & %%%%%%%%%%%%%%%%%%%%%%%%
+	Martin & 32,400 & $>$ 1,209,600 & {\scriptsize  -- }  & 2.5 & 5.7 & {\scriptsize  -- } \\ 
+experim. &	PIPE2 & 312,120 & {\scriptsize N$\!$/$\!$A} & ${}^\dag$872,294,400 &  2.1 &  {\scriptsize N$\!$/$\!$A} & 18.9 \\ 
+validated &	Ding	   & 37,708 & {\scriptsize  -- } & {\scriptsize  -- }  & 3.3 &  $>$ 256 & {\scriptsize  -- } \\
+&	SPRINT & 105,480 & {\scriptsize N$\!$/$\!$A} & 3,600 & 11.2 & {\scriptsize N$\!$/$\!$A} & 3.0  \\ \midrule
+Innate  &  %%%%%%%%%%%%%%%%%%%%%%%%
+	Martin & 32,400 & 26,280 & ${}^\dag$30,888,000 & 2.5 & 1.9 & 1.5 \\ 
+manually &	PIPE2 & 312,120 & {\scriptsize N$\!$/$\!$A} & ${}^\dag$230,342,400  &  2.1 &  {\scriptsize N$\!$/$\!$A} & 18.9 \\ 
+curated &	Ding	   & 37,708 & 55,532 & 285,323 & 3.3 & 25.4 & 25.4 \\
+&	SPRINT & 105,480 & {\scriptsize N$\!$/$\!$A} & 930 & 11.2 & {\scriptsize N$\!$/$\!$A} & 3.0  \\ \midrule
+IntAct & %%%%%%%%%%%%%%%%%%%%%%%%
+	Martin & 32,400 & $>$ 1,209,600 & {\scriptsize  -- }    & 2.5 & 3.5 & {\scriptsize  -- } \\ 
+&	PIPE2 & 312,120 & {\scriptsize N$\!$/$\!$A} & ${}^\dag$616,464,000 &  2.1 &  {\scriptsize N$\!$/$\!$A} & 18.9\\ 
+&	Ding	   & 37,708 &  $>$ 1,209,600 & {\scriptsize  -- }   & 3.3 & 220 & {\scriptsize  -- } \\
+&	SPRINT & 105,480 & {\scriptsize N$\!$/$\!$A} & 2,672 & 11.2 & {\scriptsize N$\!$/$\!$A} & 3.0  \\ \midrule
+MINT & %%%%%%%%%%%%%%%%%%%%%%%%
+	Martin & 32,400 & 101,160  & ${}^\dag$52,557,120 & 2.5 & 2.3 & 1.5\\ 
+&	PIPE2 & 312,120 & {\scriptsize N$\!$/$\!$A} & ${}^\dag$372,902,400 &  2.1 &  {\scriptsize N$\!$/$\!$A} & 18.9 \\ 
+&	Ding	   & 37,708 & 120,720 & 331,865 & 3.3 & 41.1 & 41.1\\
+&	SPRINT & 105,480 & {\scriptsize N$\!$/$\!$A} & 952 & 11.2 & {\scriptsize N$\!$/$\!$A} & 3.0  \\ \bottomrule
+\end{tabular}
+\end{table}
+
 \subsection{Availability}
-DELPHI is an open source program under the GPLv3 License. The trained model, source code of training, predicting, and data processing is freely available at\\ \texttt{https://github.comlucian-ilie/DELPHI}. 
-All datasets used in this study can be downloaded at \texttt{http://www.csd.uwo.ca/\~{}ilie/DELPHI/}.\\
+SPRINT is freely available at  \texttt{https://github.com/lucian-ilie/SPRINT/}\\
+Any restrictions to use by non-academics: None.\\
+The UniProt protein sequences we used, precomputed similarities for these sequences, the datasets, and the top 1\% predicted PPIs for the entire human interactome can be found at \texttt{www.csd.uwo.ca/faculty/ilie/SPRINT/}.\\
+
 \section{Conclusion}
-We introduced our program DELPHI and comprehensively compared it with nine state-of-the-art programs on five datasets. DELPHI provides the best predictions in all metrics. The contributions of the DELPHI study are as follows.
-First, a novel fine tuned ensemble model combing CNN and RNN is constructed in which three features are used the first time in this problem. Second, a many-to-one structure, that not only serves as a data augmentation technique but also improves the prediction performance, is applied. Third, a data processing and feature construction suite, including new features, is provided, aiming to alleviating the difficulty of tedious feature computation by the users.
+We introduced our program SPRINT and comprehensively compared it with five state-of-the-art programs on seven human datasets. SPRINT is more accurate and running orders of magnitudes faster than the competing methods. The contributions of the SPRINT study are as follows.
+First, an end-to-end PPI perdition program is provided, freely to the public. SPRINT is easy to use, and we hope it will make PPI prediction for entire interactomes a routine task. Second, the fast design and the implementation of sequence indexing, similarities detection and scoring PPI are made available. The HSP computation component can be easily used in connection with other tool, such as DELPHI \cite{li2020delphi}. Third, six new human PPI benchmark datasets are constructed and the entire human interactome prediction on each of them are also made available.

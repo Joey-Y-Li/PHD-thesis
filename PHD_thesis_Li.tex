@@ -31,6 +31,31 @@
 \usepackage{amsmath}
 \usepackage[byname]{smartref}
 \usepackage[hidelinks]{hyperref}
+\usepackage{subcaption}
+\usepackage{graphicx}
+\usepackage{multirow}
+\usepackage{changepage}
+\usepackage{pseudocode}
+\usepackage[lined,ruled,linesnumbered]{algorithm2e}
+\newcounter{algccc}
+\newcommand{\ccc}{\addtocounter{algccc}{1}\thealgccc.\ }
+
+\newcommand{\qqa}{\hspace*{10pt}}
+\newcommand{\qqb}{\qqa\qqa}
+\newcommand{\qqc}{\qqb\qqa}
+\newcommand{\qqd}{\qqc\qqa}
+\newcommand{\qqe}{\qqd\qqa}
+\newcommand{\qqf}{\qqe\qqa}
+\newcommand{\qqg}{\qqf\qqa}
+\newcommand{\qqh}{\qqg\qqa}
+\newcommand{\qqi}{\qqh\qqa}
+\newcommand{\qqj}{\qqi\qqa}
+
+\DeclareMathOperator{\Thit}{T_{\rm hit}}
+\DeclareMathOperator{\Tsim}{T_{\rm sim}}
+\DeclareMathOperator{\Thc}{T_{\rm hc}}
+\DeclareMathOperator{\Msim}{M_{\rm sim}}
+\def\pp{\mathinner{\ldotp\ldotp}}
 %\usepackage{hyperref} %comment out for hardcopy
 % \usepackage{txfonts}
 \usepackage{tocloft}
@@ -84,7 +109,7 @@
 %% To produce output with the desired line spacing, the argument of
 %% \spacing should be multiplied by 5/6 = 0.8333, so that 1 1/2 spaced
 %% corresponds to \spacing{1.5} and double spaced is \spacing{1.66}.
-\def\normalspacing{1.25} % default line spacing
+\def\normalspacing{1.5} % default line spacing
 
 
 %% Define the "thesis" page style.
@@ -184,7 +209,7 @@
   \edef\@tempa{#1}%
   \def\@tempb{}%
   \ifx\@tempa\@tempb
-	\else \newpage \Large Acknowlegements\normalsize\\\indent\\#1\newpage
+	\else \newpage \Large Acknowledgements\normalsize\\\indent\\#1\newpage
   \fi
 }
 
@@ -213,15 +238,15 @@
 \newcommand{\gyear}{\number\year}
 \newcommand{\makecoauthor}{
 %Type information about coauthorship here/
-I would like to acknowlege my imaginary friend, Jummi for doing all the work. 
+I would like to acknowledge my imaginary friend, Jummi for doing all the work. 
 }
 \newcommand{\makeacknowlege} {
-I would like to thank ...
+TODO ...
 }
-\newcommand{\listappendixname}{List of Appendices}
-\newlistof{myappendices}{app}{\listappendixname}
-\newcommand{\myappendices}[1]{%
-\addcontentsline{app}{myappendices}{#1}\par}
+% \newcommand{\listappendixname}{List of Appendices}
+% \newlistof{myappendices}{app}{\listappendixname}
+% \newcommand{\myappendices}[1]{%
+% \addcontentsline{app}{myappendices}{#1}\par}
 
 \renewcommand{\maketitle}
 {\begin{titlepage}
@@ -357,7 +382,15 @@ Chair of the Thesis Examination Board
 %%  ***  Put your Abstract here.   ***
 %% (150 words for M.Sc. and 350 words for Ph.D.)
 
-This is a really silly abstract.
+Proteins are essential to organisms and participate in virtually every  process within cells. Quite often, they keep the cells functioning by interacting with other proteins. This process is called protein-protein interaction (PPI). The bonding amino acid residues during the process of protein-protein interactions are called PPI binding sites. Identifying PPIs and PPI binding sites are fundamental problems in system biology.
+
+Experimental methods for solving these two problems are slow and expensive. Therefore, great efforts are being made towards increasing the performance of computational methods.
+
+We present DELPHI \cite{li2020delphi}, a deep learning based program for PPI site prediction and SPRINT \cite{li2017sprint, li2020predicting}, a algorithmic based program for PPI prediction. Both programs have been compared to the state-of-the-art programs on several datasets. Both DELPHI and SPRINT are more accurate than the competing method. SPRINT is also orders of magnitudes faster while using very little memory.
+
+The dataset and source code for both DELPHI and SPRINT are publicly available at:
+\text{github.com/lucian-ilie} and
+and \text{www.csd.uwo.ca/\~{}ilie/software.html}
 
 \vfill
 \textbf{Keywords:} Bioinformatics, SPRINT, DELPHI, Protein-protein interaction, deep learning, Protein-protein interaction prediction, Protein-protein interaction binding sites prediction
@@ -369,8 +402,8 @@ This is a really silly abstract.
 \newpage
 \addcontentsline{toc}{chapter}{List of Tables}
 \listoftables\newpage
-\addcontentsline{toc}{chapter}{List of Appendices}
-\listofmyappendices\newpage
+% \addcontentsline{toc}{chapter}{List of Appendices}
+% \listofmyappendices\newpage
 %\addcontentsline{toc}{chapter}{List of Abbreviations, Symbols, and Nomenclature}
 %\large List of Abbreviations, Symbols, and Nomenclature \normalsize
 %\newpage
@@ -407,9 +440,9 @@ This is a really silly abstract.
 %% and \include or \input it here).
 
 %Appendices.
-\begin{appendices}
-\include{appendixa}
-\end{appendices}
+% \begin{appendices}
+% \include{appendixa}
+% \end{appendices}
 
 %CV only relevant stuff... not full CV.
 \addcontentsline{toc}{chapter}{Curriculum Vitae}
@@ -443,9 +476,16 @@ This is a really silly abstract.
 \end{tabular}
 \end{table}
 \subsubsection*{Publications:}
-Li, Y. and Ilie, L., 2020. DELPHI: accurate deep ensemble model for protein interaction sites prediction\\\\
+Li, Y. and Ilie, L., 2020. DELPHI: accurate deep ensemble model for protein interaction sites prediction, \\\\
 Li, Y. and Ilie, L., 2019. Predicting Protein–Protein Interactions Using SPRINT. Protein-Protein Interaction Networks. Humana, New York, NY, 2020. 1-11.\\\\
 Li, Y. and Ilie, L., 2017. SPRINT: ultrafast protein-protein interaction prediction of the entire human interactome. BMC bioinformatics 18.1 (2017): 485.
+
+\subsubsection*{Referred Conference Presentations:}
+DELPHI: accurate deep ensemble model for protein interaction sites prediction
+(ISMB’20), 3DSIG, Montreal, 2020. (abstract and poster)\\\\
+Y. Li, L. Ilie, SPRINT: Ultrafast protein-protein interaction prediction of the entire human interactome, 25th Annual International Conference on Intelligent Systems for Molecular Biology
+(ISMB’17), 3DSIG, Prague, 2017. (poster)
+
 
 \end{spacing}
 \end{document}
