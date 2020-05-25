@@ -232,16 +232,25 @@
 \newcommand{\lastname}{Li}
 %\renewcommand{\author}[1]{\ifx\empty#1\else\gdef\@author{#1}\fi} 
 \newcommand{\authorname}{{\firstname} {\middlename} {\lastname}}
-\newcommand{\titl}{Computational Methods for Predicting Protein-protein Interactions and Binding Sties}
+\newcommand{\titl}{Computational Methods for Predicting Protein-protein Interactions and Binding Sites}
 \newcommand{\spinetitle}{}%only if the above is more than 60 characters
 \newcommand{\thesisformat}{Monograph} %or Integrated Article
 \newcommand{\gyear}{\number\year}
 \newcommand{\makecoauthor}{
 %Type information about coauthorship here/
-I would like to acknowledge my imaginary friend, Jummi for doing all the work. 
 }
 \newcommand{\makeacknowlege} {
-TODO ...
+First and foremost, my sincere gratitude goes to my supervisor, Dr. Lucian Ilie. He has not only taught me knowledge in computer science, more importantly, the right way of doing things in general. My growth throughout my master and PhD period would not be possible without his inspiring lectures, hands-on instructions and manuscript editing, countless video discussions, and mental supports.
+
+I would also like to express my heartfelt appreciation to my parents. To me, leaving home and pursing new life is exciting, adventures, and rewarding, but to them, in addition, is not being able to spend holidays with their only kid. I gradually understand their feelings these years, and I would like to say: thank you and I love you Dad and Mom.
+
+I would also like to thank my fiancee Karen Qi and her parents. Studying and working at the same time is way harder than I initially though, but you made it easier. Toronto feels like home because of you.
+
+I thank my lab mates, Shaofeng Jiang, Fang Han, Qin Dong, Zhewei Liang, Nilesh Khiste, Yi Liu, Weiping Sun, Ehsan Haghshenas, Mike Molnar in Middlesex College 222, Computer Science Department, Western University. I will certainly remember the great hikes, BBQs, trips, gatherings we had together as colleagues and friends. 
+
+My appreciation also goes to Huawei Toronto Research Center. I am horned to be in such a great team with great talents. The engineering skills I learned at Huawei benefit me a lot in my research projects. 
+
+To all my teammates on the Table Tennis Varsity Team, Western University: table tennis is an important part of me, and one of the reasons is the amazing people I met, like you.
 }
 % \newcommand{\listappendixname}{List of Appendices}
 % \newlistof{myappendices}{app}{\listappendixname}
@@ -386,7 +395,7 @@ Proteins are essential to organisms and participate in virtually every  process 
 
 Experimental methods for solving these two problems are slow and expensive. Therefore, great efforts are being made towards increasing the performance of computational methods.
 
-We present DELPHI \cite{li2020delphi}, a deep learning based program for PPI site prediction and SPRINT \cite{li2017sprint, li2020predicting}, a algorithmic based program for PPI prediction. Both programs have been compared to the state-of-the-art programs on several datasets. Both DELPHI and SPRINT are more accurate than the competing method. SPRINT is also orders of magnitudes faster while using very little memory.
+We present DELPHI \cite{li2020delphi, li2020delphi_ISMB}, a deep learning based program for PPI site prediction and SPRINT \cite{li2017sprint, li2020predicting}, a algorithmic based program for PPI prediction. Both programs have been compared to the state-of-the-art programs on several datasets. Both DELPHI and SPRINT are more accurate than the competing method. SPRINT is also orders of magnitudes faster while using very little memory.
 
 The dataset and source code for both DELPHI and SPRINT are publicly available at:
 \text{github.com/lucian-ilie} and

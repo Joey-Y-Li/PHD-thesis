@@ -2,8 +2,8 @@
 This chapter describes our two publications regarding SPRINT (Scoring PRotein INTeractions) \cite{li2017sprint, li2020predicting}, a sequence based protein-protein interaction site prediction program. We first introduce the prerequisites used in SPRINT as well as the state-of-the-art methods. Then we describe both the algorithm and the implementation of SPRINT in details.  Last, we compare DELPHI with five state-of-the-art programs on seven datasets showing that it is more accurate while running orders of magnitude faster and using very little memory.
 \section{Background}
 In addition to the deep learning prerequisites introduced in Section \ref{set_AI_in_bioinfor}, we explain some preliminary algorithmic concepts used in the SPRINT algorithm in this section.
-\subsection{Homology Search}
-Homology search is a task to detect identical or similar segments among sequences. It is a routinely performed task DNA or protein sequences. Many bioinformatics programs highly depend on homology search, and quite a few algorithms have been proposed for this task. 
+\subsection{Similarity Search}
+Similarity search is a task to detect identical or similar segments among sequences. It is a routinely performed task DNA or protein sequences. Many bioinformatics programs highly depend on similarity search, and quite a few algorithms have been proposed for this task. 
 
 The Smith-Waterman algorithm \cite{smith_waterman_1981} was proposed in the early 80's. This classic dynamic programming algorithm detects the optimal local alignment between two sequences. It guarantees to find the best solution, and that comes with the price of high time complexity. As shown in Figure \ref{fig_smith_waterman}, the Smith-Waterman algorithm works as two steps: Filling the scoring matrix and tracing back the optimal alignment. The value $S[i,j]$ in the position  $(i,j)$ is determined by three values around it: $S[i-1,j-1]$, $S[i-1,j]$, and $S[i,j-1]$. The detailed algorithm and analysis can be seen in \cite{smith_waterman_1981}. The worst time complexity is $O(mn)$ where $m$ and $n$ are the lengths of two sequences. This computationally expensive algorithm was soon overwhelmed by the amount of increasing biological data.
 
@@ -31,7 +31,7 @@ Heuristic algorithms were proposed aiming to detecting similarities much faster 
 
 The most noticeable algorithm and its suite is the the BLAST (Basic Local Alignment Search Tool) family \cite{Altschul90_BLAST, altschul1997PSI_BLAST}. BLATS serves as part of the pipelines for thousands of programs. The two papers together have had 157,399 citations till May 2020. 
 
-The key process in BLAST is called hit-and-extension. When identifying similarity, BLAST requires first short consecutive matches between two strings. Then the matched region extends to both the left and the right side to form a longer local alignment. This extension stops until the similarities of the detected region drops below a threshold. The default number for DNA sequences is eleven consecutive matches. Denoting the matches by 1's we obtain what is called a consecutive seed: 11111111111. A pair of identical consecutive matches is called a hit. The homology grows from the consecutive matches therefore they are called the seed. A seed often is used to refer to the way these eleven positions are selected.
+The key process in BLAST is called hit-and-extension. When identifying similarity, BLAST requires first short consecutive matches between two strings. Then the matched region extends to both the left and the right side to form a longer local alignment. This extension stops until the similarities of the detected region drops below a threshold. The default number for DNA sequences is eleven consecutive matches. Denoting the matches by 1's we obtain what is called a consecutive seed: 11111111111. A pair of identical consecutive matches is called a hit. The similarity grows from the consecutive matches therefore they are called the seed. A seed often is used to refer to the way these eleven positions are selected.
 
 Figure \ref{fig_BLAST} shows an example of the hit-and-extension algorithm. When a hit is detected by the consecutive seed, marked with red color, BLAST extends this hit towards both sides (blue) until certain amount of mismatches are detected. 
 \\
@@ -95,7 +95,7 @@ Spaced-seeds outperform consecutive seeds in sensitivity because they avoid hit 
 \end{figure}
 
 \subsubsection{Multiple spaced seeds \label{sec_multiple_spaced_seed}}
-Different spaced-seeds detect different homologies. PatternHunterII \cite{Li04_PatternHunterII} proposed the idea of combining multiple spaced-seeds to detect more similarities. A sensitivities comparison is shown in Figure \ref{fig_multi_spaced_seed}. The x-axis, similarity, denotes the percentage of identities in the homology region, and the y-axis, sensitivity, is the probability of having a hit, in the given region. The first observation is that the increment of the seed number improves the sensitivity. It is also notable that typically, doubling the number of seeds gains better sensitivity than decreasing the weight by 1.
+Different spaced-seeds detect different similarity. PatternHunterII \cite{Li04_PatternHunterII} proposed the idea of combining multiple spaced-seeds to detect more similarities. A sensitivities comparison is shown in Figure \ref{fig_multi_spaced_seed}. The x-axis, similarity, denotes the percentage of identities in the similar region, and the y-axis, sensitivity, is the probability of having a hit, in the given region. The first observation is that the increment of the seed number improves the sensitivity. It is also notable that typically, doubling the number of seeds gains better sensitivity than decreasing the weight by 1.
 \begin{figure}
 \begin{center}
 \includegraphics[ height= 7cm]{img/multi_spaced_seeds.png}
@@ -206,9 +206,43 @@ Martin \cite{Martin05_PPIpred} is one of the earliest PPI perdition methods that
 \end{figure} 
 
 \subsubsection{Shen's program}
-Shen's program \cite{Shen07_PPIpred} followed the idea of using SVM to classify PPIs. Instead of using the signature to represent protein sequences, ectrostatic (including hydrogen bonding) and hydrophobic information are used.
+Shen et al. \cite{Shen07_PPIpred} proposed a sequenced-based PPI prediction method. This method uses also machine learning techniques to make predictions. Their program uses protein sequences and PPIs as training data. Then it classifies new pairs of proteins with support vector machines (SVM) and a kernel function.
+
+SVMs are used for classifying PPIs into two different sets, interacting or non-interacting. The kernel function is used for mapping training data into a higher dimension, in order to classify it linearly. A detailed introduction about SVM and kernel function can be found for instance in \cite{trevor2001elements}.
+
+A key point in machine learning is how to "learn" more useful information from training data. Shen et al. first represent amino acids by vectors (see Figure \ref{fig:shen}). Every three amino acids are grouped as a vector space $(V, F)$, where $V$ is the encoded value, from 1 to 343, and $F$ is the frequency with which those three amino acids appear. For example, the first three amino acids are encoded as (342, 1), because this combination has only appeared once. The 20 amino acids are classified into 7 classes based on the dipoles and volumes of side chain. A detailed classification is shown in Figure \ref{fig:shen_clas}.
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[height =13 cm, width = 13cm]{img/C_3_encode.jpg}
+\caption{Constructing the vector space (V, F) of a protein sequence. From: \cite{Shen07_PPIpred} \label{fig:shen}}
+\end{center}
+\end{figure}
+
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[height =5 cm, width = 8cm]{img/shen_clas.jpeg}
+\caption{Classification of amino acids. From: \cite{Shen07_PPIpred} \label{fig:shen_clas}}
+\end{center}
+\end{figure}
+
 \subsubsection{Guo's program}
-Guo's program \cite{guo2010pred_ppi} further followed the idea of using SVM by incorporating more features and auto covariance. The new features include interaction modes (electrostatic interaction, hydrophobic interaction, steric interaction and hydrogen bond), physicochemical properties. Auto cross covariance (ACC) was used to transform unequal sized feature vectors into uniform matrices. 
+Guo et al. \cite{Guo08_PPIpred} proposed another PPI prediction approach.
+This method uses SVMs and auto covariance (AC) to make predictions.
+
+Similarly with the methods mentioned in 2.5.1 and 2.5.3, SVMs are used for classifying new pairs of proteins into interacting or non-interacting sets. Each amino acid in a protein sequence is represented as neighbouring effects and physicochemical properties (shown in Figure \ref{fig:guo_ac}). According to their optimization experiment, for each amino acid, they take into account 30 neighbour amino acids of it. This neighbouring effect is then translated into a numerical value. The physicochemical properties of each amino acids are shown in Figure \ref{fig:guo_ph_ch} where H1 = hydrophobicity, H2 = hydrophilicity, V = volume of side chains, P1 = polarity, P2 = polarizability, SASA = solvent accessible surface area, NCI = net charge index of side chains. Variables of neighbouring effect and physicochemical properties be will used to calculate AC variables. SVM will take these AC variables as input to make predictions.
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[height =6 cm, width = 8cm]{img/guo_ac.jpg}
+\caption{Representation of each amino acid\label{fig:guo_ac}}
+\end{center}
+\end{figure}
+
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[height =12 cm, width = 12cm]{img/guo_ph_che.jpeg}
+\caption{Values of the seven physicochemical properties for each amino acid. From \cite{Guo08_PPIpred} \label{fig:guo_ph_ch}}
+\end{center}
+\end{figure}
 
 \subsubsection{Ding's program}
 Ding et al. \cite{ding2016predicting} published a program utilizing random forest classifier for PPI prediction. The flowchart of the program is shown in Figure \ref{fig_Ding}. The protein sequences are encoded into a 638-D matrix consisting k-gram embedding and electrostatic and hydrophobic properties.
@@ -772,4 +806,4 @@ The UniProt protein sequences we used, precomputed similarities for these sequen
 
 \section{Conclusion}
 We introduced our program SPRINT and comprehensively compared it with five state-of-the-art programs on seven human datasets. SPRINT is more accurate and running orders of magnitudes faster than the competing methods. The contributions of the SPRINT study are as follows.
-First, an end-to-end PPI perdition program is provided, freely to the public. SPRINT is easy to use, and we hope it will make PPI prediction for entire interactomes a routine task. Second, the fast design and the implementation of sequence indexing, similarities detection and scoring PPI are made available. The HSP computation component can be easily used in connection with other tool, such as DELPHI \cite{li2020delphi}. Third, six new human PPI benchmark datasets are constructed and the entire human interactome prediction on each of them are also made available.
+First, an end-to-end PPI perdition program is provided, freely to the public. SPRINT is easy to use, and we hope it will make PPI prediction for entire interactomes a routine task. Second, the fast design and the implementation of sequence indexing, similarities detection and scoring PPI are made available. The HSP computation component can be easily used in connection with other tool, such as DELPHI \cite{li2020delphi, li2020delphi_ISMB}. Third, six new human PPI benchmark datasets are constructed and the entire human interactome prediction on each of them are also made available.
