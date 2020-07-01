@@ -567,6 +567,13 @@ During training, we shuffle the data before each epoch. Since the sliding window
   model.fit(shuffle=True, ...)
 \end{lstlisting}
 
+\subsection{The DELPHI Web Server}
+Blast:
+\begin{lstlisting}[language=bash,frame=single]
+  sudo apt-get install ncbi-blast+
+  update_blastdb --decompress --passive nr
+\end{lstlisting}
+
 \section{Results}
 We have comprehensively compared DELPHI with nine state-of-the-art machine learning based methods. The comparative analysis shows that DELPHI has a better prediction accuracy in all evaluation metrics. 
 
