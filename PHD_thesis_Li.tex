@@ -36,8 +36,12 @@
 \usepackage{multirow}
 \usepackage{changepage}
 \usepackage{pseudocode}
+\usepackage{lscape}
+\usepackage{rotating}
+
 \usepackage[lined,ruled,linesnumbered]{algorithm2e}
 \newcounter{algccc}
+\newcommand{\mySecondColor}{black}
 \newcommand{\ccc}{\addtocounter{algccc}{1}\thealgccc.\ }
 
 \newcommand{\qqa}{\hspace*{10pt}}
@@ -395,7 +399,7 @@ Proteins are essential to organisms and participate in virtually every  process 
 
 Experimental methods for solving these two problems are slow and expensive. Therefore, great efforts are being made towards increasing the performance of computational methods.
 
-We present DELPHI \cite{li2020delphi, li2020delphi_ISMB}, a deep learning based program for PPI site prediction and SPRINT \cite{li2017sprint, li2020predicting}, a algorithmic based program for PPI prediction. Both programs have been compared to the state-of-the-art programs on several datasets. Both DELPHI and SPRINT are more accurate than the competing method. SPRINT is also orders of magnitudes faster while using very little memory.
+We present DELPHI, a deep learning based program for PPI site prediction and SPRINT, a algorithmic based program for PPI prediction. Both programs have been compared to the state-of-the-art programs on several datasets. Both DELPHI and SPRINT are more accurate than the competing method. SPRINT is also orders of magnitudes faster while using very little memory.
 
 The dataset and source code for both DELPHI and SPRINT are publicly available at:
 \text{github.com/lucian-ilie} and
@@ -485,14 +489,14 @@ and \text{www.csd.uwo.ca/\~{}ilie/software.html}
 \end{tabular}
 \end{table}
 \subsubsection*{Publications:}
-Li, Y. and Ilie, L., 2020. DELPHI: accurate deep ensemble model for protein interaction sites prediction, \\\\
+Li, Y. and Golding, G.~Brian and Ilie, L., 2020. DELPHI: accurate deep ensemble model for protein interaction sites prediction, under revision\\\\
 Li, Y. and Ilie, L., 2019. Predicting Protein–Protein Interactions Using SPRINT. Protein-Protein Interaction Networks. Humana, New York, NY, 2020. 1-11.\\\\
 Li, Y. and Ilie, L., 2017. SPRINT: ultrafast protein-protein interaction prediction of the entire human interactome. BMC bioinformatics 18.1 (2017): 485.
 
 \subsubsection*{Referred Conference Presentations:}
-DELPHI: accurate deep ensemble model for protein interaction sites prediction
+Li, Y. and Golding, G.~Brian and Ilie, L., DELPHI: accurate deep ensemble model for protein interaction sites prediction
 (ISMB’20), 3DSIG, Montreal, 2020. (abstract and poster)\\\\
-Y. Li, L. Ilie, SPRINT: Ultrafast protein-protein interaction prediction of the entire human interactome, 25th Annual International Conference on Intelligent Systems for Molecular Biology
+Li, Y. and Ilie, L., SPRINT: Ultrafast protein-protein interaction prediction of the entire human interactome, 25th Annual International Conference on Intelligent Systems for Molecular Biology
 (ISMB’17), 3DSIG, Prague, 2017. (poster)
 
 

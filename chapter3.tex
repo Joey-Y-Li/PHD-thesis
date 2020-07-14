@@ -1,4 +1,4 @@
-\chapter{Protein-protein Interaction Prediction: SPRINT \label{chap_3}}
+\chapter{SPRINT \label{chap_3}}
 This chapter describes our two publications regarding SPRINT (Scoring PRotein INTeractions) \cite{li2017sprint, li2020predicting}, a sequence based protein-protein interaction site prediction program. We first introduce the prerequisites used in SPRINT as well as the state-of-the-art methods. Then we describe both the algorithm and the implementation of SPRINT in details.  Last, we compare DELPHI with five state-of-the-art programs on seven datasets showing that it is more accurate while running orders of magnitude faster and using very little memory.
 \section{Background}
 In addition to the deep learning prerequisites introduced in Section \ref{set_AI_in_bioinfor}, we explain some preliminary algorithmic concepts used in the SPRINT algorithm in this section.
@@ -22,11 +22,11 @@ The Smith-Waterman algorithm \cite{smith_waterman_1981} was proposed in the earl
         %  \caption{$y=5/x$}
         %  \label{fig_five over x}
      \end{subfigure}
-        \caption[The Smith-Waterman algorithm.]{The Smith-Waterman algorithm.}
+        \caption[The Smith-Waterman algorithm.]{The Smith-Waterman algorithm. From wikipedia.org.}
         \label{fig_smith_waterman}
 \end{figure}
 
-\subsubsection{BLAST seeds}
+\subsubsection{BLAST Seeds}
 Heuristic algorithms were proposed aiming to detecting similarities much faster and at the same time, detecting most of the similarities.
 
 The most noticeable algorithm and its suite is the the BLAST (Basic Local Alignment Search Tool) family \cite{Altschul90_BLAST, altschul1997PSI_BLAST}. BLATS serves as part of the pipelines for thousands of programs. The two papers together have had 157,399 citations till May 2020. 
@@ -57,7 +57,7 @@ To reduce the time complexity, fast identification hits is usually implemented b
 
 The sensitivity of a seed is defined by its probability of finding similarities. The length of the consecutive seed in BLAST determines the sensitivity and the speed of the program. In order to detecting more hits, i.e. higher sensitivity, shorter seeds are needed, but shorter seeds also means higher time complexity.
 
-\subsubsection{Spaced seeds}
+\subsubsection{Spaced Seeds}
 PatternHunter proposed \cite{Ma02_PatternHunter} the idea of spaced-seed. Denote the five consecutive matches of a BLAST seed by 11111; this is called a consecutive seed of weight five. Spaced  seeds consists of matches interspersed by "don’t care" positions. Matches positions are denoted by 1, and "don't care" positions are denoted by *, sometimes by 0. here is an example of such a spaced seed of weight 11 and length 18: 111*1**1*1**11*111. A spaced match requires only the letters in positions corresponding to 1’s in the seed to match. Figure \ref{fig_hit_spaced_seed} shows an example of a hit using the spaced-seed. The match positions requires identical characters in two sequences while the "don't care" positions do not.
 
 \begin{figure}[h!]
@@ -94,7 +94,7 @@ Spaced-seeds outperform consecutive seeds in sensitivity because they avoid hit 
 \end{center}
 \end{figure}
 
-\subsubsection{Multiple spaced seeds \label{sec_multiple_spaced_seed}}
+\subsubsection{Multiple Spaced Seeds \label{sec_multiple_spaced_seed}}
 Different spaced-seeds detect different similarity. PatternHunterII \cite{Li04_PatternHunterII} proposed the idea of combining multiple spaced-seeds to detect more similarities. A sensitivities comparison is shown in Figure \ref{fig_multi_spaced_seed}. The x-axis, similarity, denotes the percentage of identities in the similar region, and the y-axis, sensitivity, is the probability of having a hit, in the given region. The first observation is that the increment of the seed number improves the sensitivity. It is also notable that typically, doubling the number of seeds gains better sensitivity than decreasing the weight by 1.
 \begin{figure}
 \begin{center}
@@ -106,17 +106,17 @@ The dashed curves are the sensitivity of single optimal spaced-seed of weight 10
 
 Because of the advantage in sensitivity, SPRINT adopts the multiple spaced-seeds. The next natural step is to pick the shape of the seeds. Computing optimal seeds is a hard problem. Even the heuristic algorithms are exponential, except for SpEED \cite{ilie2007multiple, ilie2011speed}. We have thus used SpEED to compute the multiple spaced seeds to be used in our PPI prediction program. 
 
-\subsubsection{Substitution matrix}
+\subsubsection{Substitution Matrix}
 In bioinformatics and evolutionary biology, a substitution matrix describes the rate at which one character in a sequence changes to other character states over time. The similarity between sequences depends on their divergence time and the substitution rates as represented in the matrix. Substitution metrics like PAM and BLOSUM are often used as similarity measurement for protein sequences \cite{eddy2004_BLOSUM_PAM}, and thus they are sometimes called similarity matrices. An example, the BLOSUM62 matrix is shown in Figure \ref{fig_BLOSUM62}.
 
 \begin{figure}[h!]
 \begin{center}
 \includegraphics[ height= 7cm]{img/BLOSUM62.png}
-\caption[The BLOSUM62 matrix]{An example of substitution matrix, the BLOSUM62 matrix. BLOSUM 62 is a matrix calculated from comparisons of sequences with a pairwise identity of no more than 62\%. From \text{en.wikipedia.org/wiki/BLOSUM}    \label{fig_BLOSUM62}}
+\caption[The BLOSUM62 matrix]{An example of substitution matrix, the BLOSUM62 matrix. BLOSUM 62 is a matrix calculated from comparisons of sequences with a pairwise identity of no more than 62\%. From \text{wikipedia.org}    \label{fig_BLOSUM62}}
 \end{center}
 \end{figure}
 
-\subsubsection{Interactome prediction}
+\subsubsection{Interactome Prediction}
 The PPI prediction problem, interactome prediction means to score every pair in a proteome of an organism. Denote the total number of protein sequences in an organism as $P$, its interactome has $(1+P)\times P\div 2$ interactions. This is a relatively big number for advanced organisms. For instance, human has about 20,000 proteins, and human's interactome has $(1+20000) \times 20000\div 2 = 200,010,000$ interactions to predict. Comparing to the PPI site prediction problem, which only involves the computation on $P$ sequences, the amount of computation is much higher in the PPI prediction problem.
 
 \subsection{Previous Methods}
@@ -124,7 +124,7 @@ As shown in Table \ref{table_experimental_ppi_pred}, various experimental techni
 \begin{table}[h!]
 \begin{center}
 \includegraphics[ width = 16cm, height= 7cm]{img/experimental_PPI_identification.png}
-\caption[Experimental methods for PPI identification]{Experimental methods for PPI identification (From \cite{shoemaker2007deciphering}). High-throughput methods are marked with + in the second column. The fourth column shows whether the method on physically interacting proteins in a complex (‘‘complex’’) or only pairwise interactions (‘‘binary’’).   \label{table_experimental_ppi_pred}}
+\caption[Experimental methods for PPI identification]{Experimental methods for PPI identification. High-throughput methods are marked with + in the second column. The fourth column shows whether the method on physically interacting proteins in a complex (‘‘complex’’) or only pairwise interactions (‘‘binary’’). (From \cite{shoemaker2007deciphering})  \label{table_experimental_ppi_pred}}
 \end{center}
 \end{table}
 
@@ -190,13 +190,13 @@ In terms of accuracy improvement, PIPE2 applies a binary filter which works as s
 \begin{figure}[h!]
 \begin{center}
 \includegraphics[height = 4 cm]{img/binary_filter.png}
-\caption[The binary filter of PIPE2]{The binary filter of PIPE2. The centered number is replaced with 1 if there are more non-zero values than zero values in the surrounding eight cells, with 0 otherwise.  \label{fig_binary_filter}}
+\caption[The binary filter of PIPE2]{The binary filter of PIPE2. The centered number is replaced with 1 if there are more non-zero values than zero values in the surrounding eight cells, with 0 otherwise. From \cite{Pitre08_PIPE2}. \label{fig_binary_filter}}
 \end{center}
 \end{figure} 
 
 PIPE's third version \cite{schoenrock2011mp}, PIPE3, parallels PIPE2. The algorithm is still slow, but it was the first program able to predict the entire human interactome. It took over 3 months to run the entire human proteome on 50 nodes with 12,800 parallel computational threads.
 
-\subsubsection{Martin's program}
+\subsubsection{Martin's Program}
 Martin \cite{Martin05_PPIpred} is one of the earliest PPI perdition methods that use machine learning. It is highly cited and still considered one of the most effective ones. The workflow of Martin is shown in Figure \ref{fig_Martin}. The core idea of this method is using Support Vector Machine (SVM) \cite{hearst1998support} to classify PPIs. The inputs to the SVM is the encoding of two protein sequences. Encoding protein sequences were not a well studied problem at that time, and their solution was to use signature molecular descriptor \cite{visco2002developing, faulon2003signature1, faulon2003signature2}. The signature of a sequence $A$ is defined as $s(A) = \sigma_iz_i$ where $z_i$ is the all trimers of amino acids and $\sigma_i$ is the number of occurrences of trimer $z_i$. Each trimer put the centered residue at front and the two neighboring residues afterwards. For example, the signature of the sequence $LVMTTM$ is denoted as $s(LVMTTM) = V(LM)+M(TV)+2T(MT)$. The two signatures are further converted into two tensors and then computed the tensor product.
 \begin{figure}[h!]
 \begin{center}
@@ -205,7 +205,7 @@ Martin \cite{Martin05_PPIpred} is one of the earliest PPI perdition methods that
 \end{center}
 \end{figure} 
 
-\subsubsection{Shen's program}
+\subsubsection{Shen's Program}
 Shen et al. \cite{Shen07_PPIpred} proposed a sequenced-based PPI prediction method. This method uses also machine learning techniques to make predictions. Their program uses protein sequences and PPIs as training data. Then it classifies new pairs of proteins with support vector machines (SVM) and a kernel function.
 
 SVMs are used for classifying PPIs into two different sets, interacting or non-interacting. The kernel function is used for mapping training data into a higher dimension, in order to classify it linearly. A detailed introduction about SVM and kernel function can be found for instance in \cite{trevor2001elements}.
@@ -225,7 +225,7 @@ A key point in machine learning is how to "learn" more useful information from t
 \end{center}
 \end{figure}
 
-\subsubsection{Guo's program}
+\subsubsection{Guo's Program}
 Guo et al. \cite{Guo08_PPIpred} proposed another PPI prediction approach.
 This method uses SVMs and auto covariance (AC) to make predictions.
 
@@ -244,7 +244,7 @@ Similarly with the methods mentioned in 2.5.1 and 2.5.3, SVMs are used for class
 \end{center}
 \end{figure}
 
-\subsubsection{Ding's program}
+\subsubsection{Ding's Program}
 Ding et al. \cite{ding2016predicting} published a program utilizing random forest classifier for PPI prediction. The flowchart of the program is shown in Figure \ref{fig_Ding}. The protein sequences are encoded into a 638-D matrix consisting k-gram embedding and electrostatic and hydrophobic properties.
 \begin{figure}[h!]
 \begin{center}
@@ -252,37 +252,37 @@ Ding et al. \cite{ding2016predicting} published a program utilizing random fores
 \caption[The workflow of Ding's program]{The workflow of Ding's program. The two input protein sequences are represented using a vector of dimension 638, consisting k-gram embedding and electrostatic and hydrophobic properties. The classifier is random forest. \label{fig_Ding}}
 \end{center}
 \end{figure} 
-\subsubsection{DPPI}
-DPPI \cite{hashemifar2018predicting} is a recent PPI prediction program using deep learning. It employs a Siamese-like network structure which learns from two proteins. The input sequences are firstly represented using PSSMs, then both matrices are passed to convolutional layers. Then a random projection module is applied to reduce the dimension of the tensor as well as to improve the prediction performance. In the end a linear layer outputs the prediction result.
-\begin{figure}[h!]
-\begin{center}
-\includegraphics[height =6 cm, width = 17cm]{img/DPPI.png}
-\caption[The architecture of DPPI]{The architecture of DPPI. The sequences are encoded using PSSMs, passed into convolutional random projection, and linear layers. From \cite{hashemifar2018predicting} \label{fig_DPPI}}
-\end{center}
-\end{figure} 
-\subsubsection{PIPR}
-PIPR \cite{chen2019multifaceted} is one of the most recent PPI predictors. Similar to DPPI, it also employees a Siamese-like network using deep learning algorithms. As shown in Figure \ref{fig_PIPR}, two protein sequences are represented using embedding. The embedding contains two parts: Skip-Gram \cite{mikolov2013distributed} based embedding and electrostaticity and hydrophobicity characteristics. The embedding is then passed to residual RCNN network. The residual CRNN consists convolutional and bidirectional GRU layer. The GRU layer has shortcut connection between the input and the output. The outputs of the RCNN unit is put together using element-wise multiplication, and then the product is passed to fully-connected layers for prediction. 
+% \subsubsection{DPPI}
+% DPPI \cite{hashemifar2018predicting} is a recent PPI prediction program using deep learning. It employs a Siamese-like network structure which learns from two proteins. The input sequences are firstly represented using PSSMs, then both matrices are passed to convolutional layers. Then a random projection module is applied to reduce the dimension of the tensor as well as to improve the prediction performance. In the end a linear layer outputs the prediction result.
+% \begin{figure}[h!]
+% \begin{center}
+% \includegraphics[height =6 cm, width = 17cm]{img/DPPI.png}
+% \caption[The architecture of DPPI]{The architecture of DPPI. The sequences are encoded using PSSMs, passed into convolutional random projection, and linear layers. From \cite{hashemifar2018predicting} \label{fig_DPPI}}
+% \end{center}
+% \end{figure} 
+% \subsubsection{PIPR}
+% PIPR \cite{chen2019multifaceted} is one of the most recent PPI predictors. Similar to DPPI, it also employees a Siamese-like network using deep learning algorithms. As shown in Figure \ref{fig_PIPR}, two protein sequences are represented using embedding. The embedding contains two parts: Skip-Gram \cite{mikolov2013distributed} based embedding and electrostaticity and hydrophobicity characteristics. The embedding is then passed to residual RCNN network. The residual CRNN consists convolutional and bidirectional GRU layer. The GRU layer has shortcut connection between the input and the output. The outputs of the RCNN unit is put together using element-wise multiplication, and then the product is passed to fully-connected layers for prediction. 
 
-\begin{figure}[h!]
-\centering
-\begin{subfigure}[b]{\textwidth}
-   \includegraphics[width = 17cm]{img/PIPR_archi.png}
-   \caption{}
-   \label{fig_Ng1} 
-\end{subfigure}
+% \begin{figure}[h!]
+% \centering
+% \begin{subfigure}[b]{\textwidth}
+%   \includegraphics[width = 17cm]{img/PIPR_archi.png}
+%   \caption{}
+%   \label{fig_Ng1} 
+% \end{subfigure}
 
-\begin{subfigure}[b]{\textwidth}
-   \includegraphics[width = 17cm]{img/PIPR.png}
-   \caption{}
-   \label{fig_PIPR}
-\end{subfigure}
+% \begin{subfigure}[b]{\textwidth}
+%   \includegraphics[width = 17cm]{img/PIPR.png}
+%   \caption{}
+%   \label{fig_PIPR}
+% \end{subfigure}
 
-\caption[The architecture of PIPR]{(a) The overall architecture of PIPR. The flowchart consists input sequences, embedding, residual RCNN, element-wise multiplication, multi-layer perceptron. (b) The details of the RCNN unit. The RCNN combines a CNN and a RNN components. The RNN part is bidirectional GRU layer with residual shortcuts that bridge the input and the output of the GRU layer.}
-\end{figure}
+% \caption[The architecture of PIPR]{(a) The overall architecture of PIPR. The flowchart consists input sequences, embedding, residual RCNN, element-wise multiplication, multi-layer perceptron. (b) The details of the RCNN unit. The RCNN combines a CNN and a RNN components. The RNN part is bidirectional GRU layer with residual shortcuts that bridge the input and the output of the GRU layer.}
+% \end{figure}
 
-\section{Methods and Materials}
+\section{Methods}
 We describe in this section both the algorithm and the implementation of SPRINT in details.
-\subsection{Basic idea}
+\subsection{Basic Idea}
 Proteins similar with interacting proteins are likely to interact as well. That is, if $P_1$ is known to interact with $P_2$ and the sequences of $P_1$ and $P'_1$ are highly similar and the sequences of $P_2$ and $P'_2$ are highly similar, then $P'_1$ and $P'_2$ are likely to interact as well. In a way or another, this is essentially the idea behind the brute force calculation of PIPE as well as the machine learning algorithms of Martin, Shen, and Guo. 
 
 SPRINT uses a complex algorithm to quickly evaluate the contribution of similar subsequences to the likelihood of interaction. SPRINT has two main steps: computing HSP and predicting interactions. 
@@ -485,7 +485,7 @@ Once all spaced-mers are stored, for each spaced-mer in the hashtable, all simil
 
 \subsection{Predicting Interactions}
 As previously showed in Figure \ref{fig_SPRINT_workflow}, after obtaining the HSPs, the next step is to predict interactions.
-\subsubsection{Post-processing similarities}
+\subsubsection{Post-processing Similarities}
 We first process the similar subsequences we computed in the previous phase to remove those appearing too many times as they are believed to be just repeats that occur very often in the protein sequences without any relevance for the interaction process. We explain the algorithm on the toy example below. For the protein sequence {\tt MVLSPADKTNVKAAWG}, assume we have found the similarities marked by lines in  Figure~\ref{fig_similarities}(a). For example, the top line means that {\tt MVLSP} was found to be similar with another subsequence somewhere else, the bottom line represents the same about the subsequence {\tt KTNVKAAW}, etc. 
 
 \begin{figure}[h!]
@@ -495,7 +495,7 @@ We first process the similar subsequences we computed in the previous phase to r
 \end{figure}
 
 The counts in the bottom row indicate how many times each position occurs in all similarities found. (In the figure above, this means the number of lines that cover that position.) All positions with a high count, above a threshold $\Thc$, will be eliminated from all similarities, which will be modified accordingly. In our example, assuming the threshold is 5, positions 3, 4, 8, 9, and 10 have counts 5 or higher and are eliminated; see Figure~\ref{fig_similarities}(b). The new similarities are indicated by the lines above the sequence. For example, {\tt MVLSP} has positions 3 and 4 removed and becomes two similarities, {\tt MV} and {\tt P}. The counterpart of each similarity is modified the same way.
-\subsubsection{Scoring function}
+\subsubsection{Scoring Function}
 What we have computed so far are HSPs, that is, pairs of similar subsequences of the same length. We now show how to score an interaction. First, we extend the definition of the score from $k$-mers to arbitrary subsequences of equal length. For two subsequences $X$ and $Y$ of length $n$, the score is given by the sum of the scores of all corresponding $k$-mer pairs; using \eqref{eq_score_kmer}:
 \begin{equation}\label{eq_score_nmer}
 S_e(X,Y) = \sum_{i=1}^{n-k+1}S_\textrm{$k$-mer}(X[i\pp i+k-1],Y[i\pp i+k-1])\ ,
@@ -515,7 +515,7 @@ where $|Q|$ denotes the length of the amino acid sequence $Q$. That means, the s
 Once the score are computed, by considering all given interactions and similar subsequences and computing their impact on the other scores as above, predicting interactions is simply done according to the scores. All protein pairs are sorted decreasingly by the scores; higher scores represent higher probability to interact. If a threshold is provided, then those pairs with scores above the threshold are reported as interacting. 
 
 \subsection{Implementations}
-\subsubsection{Tuneable parameters}
+\subsubsection{Tuneable Parameters}
 \label{sec:parameter}
 There are some tuneable parameters (see Table \ref{tab_parameter_SPRINT}) in SPRINT. In general, the default values are tuned experimentally and set based on the human datasets used in \cite{li2017sprint}, so it is recommended to use the default values if PPI prediction is performed on human datasets. The default values for the parameters are $k = 20$, $\Thit = 15$, $\Tsim = 35$, $M=PAM120$, and $\Thc = 40$. These values have been experimentally determined using only Park and Marcotte's data set. All the other datasets have been used exclusively for testing. The program is quite stable, the results being almost unaffected by small variations of these parameters.
 \begin{table}[]
@@ -583,11 +583,11 @@ The input consists of the proteins sequences and PPIs. The default set of seeds 
 
 
 
-\subsubsection{System configuration}
+\subsubsection{System Configuration}
 The SPRINT program is written in C++ (GCC version 4.8.2) with boost library (version 1.53). The parallel version uses OpenMP library (version 1.8.3). OpenMP is an application program interface that enables programmers to parallel the code from high level. We paralleled the hashtable computation and scoring interactions part to accelerate SPRINT.
 
 \section{Results}
-\subsection{Datasets classification}
+\subsection{Datasets Classification}
 Park and Marcotte~\cite{ParkMarcotte12_C123} noticed that all methods have significantly higher performance for the protein pairs in the testing data whose sequences appear also in the training data. Three cases are possible, depending on whether both proteins in the test data appear in training (C1), only one appears (C2), or none (C3). They show that essentially all datasets previously used for cross validation are very close to the C1 type, whereas in the HIPPIE meta-database of human PPIs \cite{Schaefer12_HIPPIE} the C1-type human protein pairs accounts for only 19.2\% of these cases, whereas C2-type and C3-type pairs make up 49.2\% and 31.6\%, respectively. Therefore, testing performed on C1-type data is not expected to generalize well to the full population. The authors proceeded to designing three separate human PPI datasets that follow the C1, C2, and C3-type rules. 
 
 \subsection{Datasets}
@@ -615,7 +615,7 @@ MINT & 16,914 & 7,000 & 700 & \texttt{mint.bio.uniroma2.it} \\ \bottomrule
 \end{tabular}
 \end{table}
 
-\subsection{Competing methods}
+\subsection{Competing Methods}
 We have compared SPRINT with five methods Martin's\cite{Martin05_PPIpred}, Shen's \cite{Shen07_PPIpred}, Guo's\cite{Guo08_PPIpred}, PIPE2\cite{Pitre08_PIPE2}, and Ding's\cite{ding2016predicting}.  Since the three methods do not have names, we use the first author's name to identify them: Martin \cite{Martin05_PPIpred}, Shen \cite{Shen07_PPIpred}, Guo \cite{Guo08_PPIpred}, and Ding \cite{ding2016predicting}.
 
 Note that PIPE2 and SPRINT do not require negative training data as they do not use machine learning algorithms. All the other programs require both positive and negative training sets. All programs are trained and tested on the same data, and the results on the testing data are reported. 
@@ -638,13 +638,13 @@ For the purpose of predicting new PPIs, the behaviour at high specificity is imp
 The area under the ROC and PR curves is given in Table~\ref{table_AUC} for all seven datasets, including the C1-, C2-, and C3-average, as well as the overall average across types. Ding is the winner for the C1 tests and SPRINT is the winner for the C2 and C3 tests. In the overall average, SPRINT comes on top. Martin is third and PIPE2 last.
 
 All ROC and PR curves are included in the supplementary material.
-
+\begin{landscape}
 \begin{table} 
   \centering
   
 \caption[Performance comparison at high specificity]{Performance comparison at high specificity. Sensitivity, precision, and $F_1$-score averages for seven datasets are given for each dataset type C1, C2 and C3, as well as overall averages across types. Darker colours represent better results. The best results are in bold. \label{table_cutoff_avg}} 
 \fontsize{9.5}{8}\selectfont
-\begin{adjustwidth}{-2.5cm}{}
+% \begin{adjustwidth}{-2.5cm}{}
     \begin{tabular}{|@{}c@{}|@{\ }c@{\ }|cccc|cccc|cccc|}
     \toprule
     \multirow{2}[4]{*}{\textbf{Dataset}} & \multirow{2}[4]{*}{\textbf{Specificity}} & \multicolumn{4}{c|}{\textbf{Sensitivity}} & \multicolumn{4}{c|}{\textbf{Precision}} & \multicolumn{4}{c|}{\textbf{F1-score}} \\
@@ -675,9 +675,9 @@ All ROC and PR curves are included in the supplementary material.
           & 95.00\% & \cellcolor[rgb]{ .871,  .925,  .835} 39.19 & \cellcolor[rgb]{ .886,  .937,  .855} 38.79 & \cellcolor[rgb]{ .639,  .749,  .565} 44.56 & \cellcolor[rgb]{ .329,  .51,  .208} 51.66 & \cellcolor[rgb]{ .886,  .937,  .855} 86.30 & \cellcolor[rgb]{ .788,  .863,  .741} 86.99 & \cellcolor[rgb]{ .733,  .82,  .678} 87.37 & \cellcolor[rgb]{ .329,  .51,  .208} 90.18 & \cellcolor[rgb]{ .886,  .937,  .855} 52.38 & \cellcolor[rgb]{ .878,  .933,  .847} 52.57 & \cellcolor[rgb]{ .682,  .78,  .616} 56.94 & \cellcolor[rgb]{ .329,  .51,  .208} 64.63 \\
     \bottomrule
     \end{tabular}%
-    \end{adjustwidth}
+    % \end{adjustwidth}
 \end{table}%
-
+\end{landscape}
 
 
 \begin{table}[] 

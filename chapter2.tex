@@ -1,5 +1,6 @@
-\chapter{Protein-protein Interaction Binding Site Prediction: DELPHI \label{chap_2}}
-This chapter introduces our recent publication DELPHI \cite{li2020delphi, li2020delphi_ISMB}, a deep learning based program for protein-protein interaction site prediction. We first describe the deep learning prerequisites used in DELPHI as well as the previous state-of-the-art methods. Then we describe both the algorithm and the implementation of DELPHI in details. Last, we compare DELPHI with nine state-of-the-art programs on five datasets showing that DELPHI outperforms other in all evaluation metrics. 
+\chapter{DELPHI \label{chap_2}}
+This chapter introduces our recent publication DELPHI \cite{li2020delphi, li2020delphi_ISMB}, a deep learning based program for protein-protein interaction site prediction. We first describe the deep learning prerequisites used in DELPHI as well as the state-of-the-art methods. Then we describe both the algorithm and the implementation of DELPHI in details. We comprehensively compare DELPHI to nine state-of-the-art programs on five datasets, and DELPHI outperforms the competing methods in all metrics even though its training dataset shares the least similarities with the testing datasets. In the most important metrics, AUPRC and MCC, it surpasses the second best programs by as much as 18.5\% and 27.7\%, resp. We also demonstrated that the improvement is essentially due to using the ensemble model and, especially, the three new features. Using DELPHI it is shown that there is a strong correlation with protein-binding residues (PBRs) and sites with strong evolutionary conservation.  In addition DELPHI's predicted PBR sites closely match known data from Pfam.
+DELPHI is available as open sourced standalone software and web server.
 \section{Background}
 \subsection{Deep Learning in Bioinformatics} \label{set_AI_in_bioinfor}
 Deep Learning is a branch of machine learning \cite{goodfellow2016deep}. It is inspired by the structure and function of the brain called artificial neural networks. From a high level, any computational programs can be considered mathematical transformation on given inputs. Traditional programs handcraft these mathematical computations while machine learning algorithms learn them. The mathematical transformation is learned from known examples, generally without being programmed with specific rules.
@@ -53,7 +54,7 @@ With the increasing amount of biological data, more and more hard biological pro
 In the area of PPI prediction and PPI binding site prediction, most of methods published within a past decade are machine learning based. Seeing the trend, we designed and implemented our program DELPHI using deep learning techniques as well.
 
 \subsection{Basic Notions and Definitions}
-\subsubsection{Deep neural networks}
+\subsubsection{Deep Neural Networks}
 Neural networks learn complex mathematical transformations using layers of neurons. Fig. \ref{fig_mlp} shows the classic structure of a multilayer perceptron (MLP). It consists of at least three layers. The input layer, the output layer, and the hidden layers. The input layer is the initial state of the data. In bioinformatics, often raw data such as DNA or protein sequences is converted to features representations like embedding or position-specific scoring matrix (PSSM). Sequence itself contains useful but often limited information and needs to be represented further using features. The input layer is then passed to hidden layers for further computation. The term “deep learning” comes from the fact that the number of the hidden layers is big.
 \begin{figure}[h!]
 \begin{center}
@@ -67,7 +68,7 @@ The term neuron, or often referred to as perceptron, means a mathematical functi
 \begin{figure}[h!]
 \begin{center}
 \includegraphics[height = 6cm, width = 7cm]{img/neuron.png}
-\caption[A neuron in deep learning networks]{A neuron in deep learning networks. $x_1$ - $x_3$ are inputs. $b$ is the bias value. $w_1$ - $w_3$ are the weights. $Z$ is the value before applying activation functions. $a$ is the final output value.\label{fig_neuron}}
+\caption[A neuron in deep learning networks]{A neuron in deep learning networks. $x_1$ - $x_3$ are inputs. $b$ is the bias value. $w_1$ - $w_3$ are the weights. $Z$ is the value before applying activation functions. $a$ is the final output value.From /towardsdatascience.com. \label{fig_neuron}}
 \end{center}
 \end{figure}
 % For inputs $x1, x2 ... xi$, the vector notation for Linear Regression and Logistic Regression are \ref{equ_linear_regression} and \ref{equ_logistic_regression} respectively where $h_\theta(x)$ are the output, also known as hypothesis, $\theta^T$ is the weights and b is the bias. 
@@ -82,7 +83,7 @@ After calculating the hypothesis, an non-linear function is often applied to it,
 \begin{figure}[h!]
 \begin{center}
 \includegraphics[width = 13cm]{img/activation_function.png}
-\caption[Popular activation functions and their plots]{Popular activation functions and their plots.\label{fig_activation_func}}
+\caption[Popular activation functions and their plots]{Popular activation functions and their plots. From /towardsdatascience.com. \label{fig_activation_func}}
 \end{center}
 \end{figure}
 
@@ -104,7 +105,7 @@ The training process aims to minimize the loss function. The weights will be adj
 \begin{figure}[h!]
 \begin{center}
 \includegraphics[width = 11cm]{img/gradient_descent.jpg}
-\caption[The illustration of gradient descent]{The illustration of gradient descent. The x-axis is the value of the weight, and the y-axis is the corresponding cost. The aim is to choose a $w$ that minimizes the cost. \label{fig_gradient_descent}}
+\caption[The illustration of gradient descent]{The illustration of gradient descent. The x-axis is the value of the weight, and the y-axis is the corresponding cost. The aim is to choose a $w$ that minimizes the cost. From saugatbhattarai.com. \label{fig_gradient_descent}}
 \end{center}
 \end{figure}
 
@@ -118,7 +119,7 @@ After training the network, all the weights are fixed and the network is ready t
 \begin{figure}[h!]
 \begin{center}
 \includegraphics[width = 13cm]{img/train_inference.jpg}
-\caption[The illustration of training and inference processes]{The illustration of training and inference processes. \label{fig_train_vs_infer}}
+\caption[The illustration of training and inference processes]{The illustration of training and inference processes. From nvidia.com.\label{fig_train_vs_infer}}
 \end{center}
 \end{figure}
 
@@ -141,7 +142,7 @@ The computation of a convolution applied on a 2D image is as follows. As shown i
 \begin{figure}[h!]
 \begin{center}
 \includegraphics[width = 13cm]{img/convolution_computation.png}
-\caption[The computation of a convolution operation]{The computation of a convolution operation. A sliding window is applied on the input image $i$. Each window multiplies the kernel matrix $K$ elementwise. The summation of the product is placed as one value in the output matrix. For example, the summation of the elementwise multiplication between a sub-matrix (red) and the kernel matrix (blue) is 4 (green). This computation is $1*1+0*0+0*1+1*0+1*1+0*0+1*1+1*0+1*1 = 4$.   \label{fig_Conv2d}}
+\caption[The computation of a convolution operation]{The computation of a convolution operation. A sliding window is applied on the input image $i$. Each window multiplies the kernel matrix $K$ elementwise. The summation of the product is placed as one value in the output matrix. For example, the summation of the elementwise multiplication between a sub-matrix (red) and the kernel matrix (blue) is 4 (green). This computation is $1*1+0*0+0*1+1*0+1*1+0*0+1*1+1*0+1*1 = 4$.   From deepai.org. \label{fig_Conv2d}}
 \end{center}
 \end{figure}
 
@@ -189,7 +190,7 @@ The fully connected layer can be implemented in Keras using the Dense layer API.
 \begin{lstlisting}[language=python,frame=single]
 keras.layers.Dense(units=1, activation='sigmoid', ...)
 \end{lstlisting}
-\subsubsection{Recurrent neural networks}
+\subsubsection{Recurrent Neural Networks}
 Another star of the deep learning algorithms is Recurrent Neural Networks (RNN). Recurrent neural networks are good at modeling sequential data. The input of an RNN is a sequence. Each chunk of the sequence is called a timestep. For example, in Fig. \ref{fig_RNN_timestep}, the network input is the sentence "What time is it". Each word or punctuation in the sentence is fed to a computation unit denoted by a circle. A single occurrence of the unit is called a timestep. RNN allows each hidden state to remember certain information from previous timesteps. The ability of carrying previous information makes RNN good at speech recognition, language translation, stock predictions etc. 
 \begin{figure}[h!]
 \begin{center}
@@ -224,7 +225,7 @@ keras.layers.LSTM(units = 32, activation='tanh', ...)
 # GRU
 keras.layers.LSTM(units = 32, activation='tanh', ...)
 \end{lstlisting}
-\subsubsection{Ensemble networks}
+\subsubsection{Ensemble Networks}
 Deep learning neural networks are nonlinear methods. This offers great flexibility in terms of fitting the training data, but a downside of this flexibility is that they are sensitive to the specifics of the training data and may find a set of weights each for a set of training data but does not apply to other data. This problem is called overfitting and often referred to as having a high variance \cite{goodfellow2016deep} as shown in Fig. \ref{fig_over_under_fitting}.
 \begin{figure}[h!]
 \begin{center}
@@ -240,7 +241,7 @@ One effective way of reducing the high variance is to train multiple models inst
 \caption[The illustration of ensemble learning]{The illustration of ensemble learning. Three models A, B, and C are trained using the same training data, and the final prediction is the combination of the output from all three models. From towardsdatascience.com \label{fig_ensemble_learning}}
 \end{center}
 \end{figure}
-\subsubsection{Dropout layers}
+\subsubsection{Dropout Layers}
 Ensemble learning can effectively reduce overfitting, but it is computationally more expensive as more models need to be trained. A single model can simulate the process of having different network architectures by dropping out nodes during training \cite{srivastava2014dropout}. As shown in Fig. \ref{fig_dropout}, the output of some nodes are randomly "dropped" to 0. This computationally cheap way is proven to be a remarkably effective regularization method to reduce overfitting. Dropout can be applied to all types of layers. In Keras, it is either integrated as a layer parameter or used directly as an independent layer. Below are some examples Keras dropout code.
 \begin{lstlisting}[language=python,frame=single]
 # 1. adding a dropout layer between two fully connected layers
@@ -253,12 +254,12 @@ keras.layers.LSTM(units=32, dropout=0.5, ...)
 \begin{figure}[h!]
 \begin{center}
 \includegraphics[height = 6cm, width = 10cm]{img/dropout.png}
-\caption[An example of applying dropout in fully connected layers]{An example of applying dropout in fully connected layers. During training, the two nodes in the middle layer are dropped out meaning that their outputs to the next layer become 0. \label{fig_dropout}}
+\caption[An example of applying dropout in fully connected layers]{An example of applying dropout in fully connected layers. During training, the two nodes in the middle layer are dropped out meaning that their outputs to the next layer become 0. From towardsdatascience.com.\label{fig_dropout}}
 \end{center}
 \end{figure}
-\subsubsection{Training, validation, and testing dataset}
+\subsubsection{Training, Validation, and Testing Dataset}
 Preparing the dataset is one of the most important steps in developing deep learning applications. Generally, in order to compare with other programs, the comparative performance on one or several gold standard testing datasets are needed. These testing datasets are often called benchmark data. One can easily train and overfit the benchmark and report good performance that fails to generalize to other datasets, so during the development process, the model should not be trained on the benchmark dataset or similar data. However, we still need a way is to tell if the model is trained well. The most popular way is to split the training dataset into two parts, training and validation. During the model development cycle, the model is trained on the training data. If the performance on the training data is satisfactory, the model is evaluated against the validation data. Results obtained on training and validation data should be similar, otherwise it is an indication of overfitting. This can be done for several rounds until the achievement of good performance. Then the performance on the testing data is reported. All adjustments to the model should be based on training and validation data only, not on benchmark data.
-\subsubsection{Data augmentations and sampling}
+\subsubsection{Data Augmentations and Sampling}
 As discussed earlier in Fig. \ref{fig_data_performance}, generally speaking, the more data to train a model, the better performance it renders. However, trainig data can be limited due to various reason. Many techniques are designed to synthetically create more data. This is called data augmentation. In computer vision, popular data augmentations include image mirroring, random cropping, and color shifting.  
 
 Many machine learning algorithms are designed to train on classification data with balanced data, but biological data is often unbalanced. For example, in a tumor image classification dataset, most of the images are benign, and only a small portion is malignant. Data sampling is a collection of techniques that transform a training dataset in order to balance or better balance the class distribution \cite{chawla2004special}. Popular techniques include randomly under-sampling the majority class, randomly over-sampling the minority class, and Sythetic Minority Oversampling Technique (SMOT) \cite{chawla2002smote}.
@@ -323,10 +324,10 @@ Training data is one of the most important factors in training a model. An trend
 
 We construct next our training and validation data such that there are no similarities above 25\% between (i) training and validation data and (ii) between testing (see Section \ref{testing_data} for details) and the union of training and validation. Also, we want relatively large training data as it is beneficial for deep learning models.
     
-\subsubsection{Raw training data}
+\subsubsection{Raw Training Data}
 We first collected a relatively large amount of raw data. A high quality dataset was provided in \cite{zhang2019comprehensive}, where proteins were solved structurally in complex from the BioLiP \cite{yang2012biolip} database. In BioLip, two residue are considered binding if the distance between the atoms of the 
 two residues $<$0.5+sum of the Van der Waal's radii of the two atoms. BioLip IDs are then mapped into UniProt IDs using SIFTS \cite{velankar2012sifts} to insure we work with complete sequences. Then we left with sequences annotated with Protein, DNA, RNA, and small ligands binding information at the residue level. We kept only the sequences with protein-protein binding information to focus on protein-protein binding.
-\subsubsection{Similarities eliminations}
+\subsubsection{Similarities Eliminations}
 We further processed this dataset by eliminating similarities. We removed any sequences from training dataset sharing more than 25\% similarities, as measured by PSI-CD-hit \cite{li2006cd,fu2012cd}, with any sequences in testing datasets. It is well acknowledged that similar sequences between training and testing datasets negatively affect the generalization of the evaluated performance of a machine learning model. Also, proteins with higher levels of similarity can be accurately predicted by the alignment-based methods \cite{zhang2018review}. The similarity threshold is picked differently by different programs ranging from 25\% to 50\%. We picked the strictest value of 25\% to match to one of the closest competing programs, SCRIBER \cite{zhang2019scriber}, for a fair comparison. We used PSI-CD-HIT because it is fast, accurate and well maintained in the CD-HIT suite. Also, it is able to cluster sequences with similarity at low as 25\%, whereas CD-HIT works only down to 40\%. Finally, we ran PSI-CD-hit again on the rest of the training protein sequences so no sequences shared more than 25\% similarities among training data. This ensures the training data is as diverse as possible. The commands to cluster proteins using PSI-CD-HIT are as follows.
 \begin{lstlisting}[language=bash,frame=single]
 # convert fasta file to blast database format
@@ -334,7 +335,7 @@ $ makeblastdb -in [fasta_file_name] -dbtype prot
 # compute protein clusters
 $ psi-cd-hit/psi-cd-hit.pl -i [fasta_file_name] -o [out_file_name] -c 0.25
 \end{lstlisting}
-\subsubsection{Data split}
+\subsubsection{Data Split}
 After the similarities elimination process, A dataset of 9,982 protein sequences was constructed. From it, we randomly pick eight ninth (8,872) as the training dataset and one ninth (1,110) as the validation dataset. This can be done by using the model\_selection module from sklearn. The commands are as follows.
 \begin{lstlisting}[language=python,frame=single]
 kfold = KFold(n_splits=9)
@@ -449,16 +450,16 @@ v_\text{norm}=\dfrac{v-\text{min}}{\text{max}-\text{min}}\label{eq_normalized}
 \end{equation}
 
 \subsection{Model Architecture}
-\subsubsection{Architecture overview}
+\subsubsection{Architecture Overview}
 DELPHI has an architecture that is inspired by ensemble learning. The intuition of the design is that different components of the model capture different information, and another deep neural network is trained to only select the most useful ones. As shown in Fig. \ref{fig_architecture}, the model consists of three parts, a convolutional neural network (CNN) component, an recurrent neural network (RNN) component, and an ensemble component. The core layers of the CNN and RNN components are convolution and bidirectional gated recurrent units (GRU) layers. The ensemble model decodes the output of the first two components.  
 
-\begin{figure*}
+\begin{sidewaysfigure}
 \centering
-\includegraphics[width=\textwidth, height=10cm]{img/Model_architecture.pdf}
+\includegraphics[height=8cm]{img/Model_architecture.pdf}
 \caption[The architecture of DELPHI]{The architecture of DELPHI. Left: the CNN component of the model. Middle: the RNN component of the model. Right: The ensemble model. 
   \label{fig_architecture}}
-\end{figure*}
-\subsubsection{Many-to-one structure}
+\end{sidewaysfigure}
+\subsubsection{Many-to-one Structure}
 Another very useful characteristic of the model is its many-to-one structure, meaning that the information of many residues are used to prediction the binding propensity of the centered single residue. As illustrated in Fig. \ref{fig_many2one}, for each amino acid as the prediction target, a window of size 31, centred on the amino acid position, is used to collect information from the neighbouring 30 residues to help the prediction. A sliding window is used to capture each 31-mer. The size 31 is determined experimentally. The beginning and the ending part of the sequence are padded with zeros. The many-to-one structure has two advantages. Firstly, it serves as a data augmentation technique. Deep learning models need large amount of data to train, and comparing to image classifiers, models in proteomics have access to orders of magnitude less data. Using each residue multiple times during the training process helps the model learn better. Secondly, it makes the model more robust. The lengths of protein sequence vary from less than one hundred to several thousand, and most a many-to-many models have a fixed input length of near 500. During training, sequences around length 500 are often picked. However, during testing, input sequences are random and need to be either padded or cut into pieces. The different average lengths between training and testing could potentially make the model less general. 
 \begin{figure*}
 \centering
@@ -466,11 +467,11 @@ Another very useful characteristic of the model is its many-to-one structure, me
   \caption[The many-to-one prediction]{The many-to-one prediction. Sliding windows of size 31, stride 1 are put on top of an input protein sequence. Each time, a sub-sequence of length 31 is extracted. The model predicts the protein-binding propensity of the middle amino acid for each sub-sequence.
   \label{fig_many2one}}
 \end{figure*}
-\subsubsection{Architecture of the CNN network}
+\subsubsection{Architecture of the CNN Network}
 The CNN model one has a concise structure: one convolution layer, one maxpooling layer, one flatten layer, and two fully connected layers. For each input sub-sequence of size 31, a 2D feature profile of size 39 by 31 is constructed. The 2D vector is reshaped into 3D and then passed to a convolution 2D layer, followed by a maxpooling layer. The intuition of using the convolution and maxpooling layers is that a 2D protein profile vector can be considered as an image with one channel, and the CNN model captures the combination of several features in a partial image. The results are flattened and then fed into two fully connected layers with dropout for regularization. The last fully connected layer has one unit with activation function sigmoid, so that the output is a single value between 0 to 1. The higher the value, the more confident the CNN model claims that the residue is a PPI binding site.
-\subsubsection{Architecture of the RNN network}
+\subsubsection{Architecture of the RNN Network}
 The RNN component has the following structure: one bidirectional GRU layer, one flatten layer, and two fully connected layers. Similar to the CNN component, a 2D feature profile of size 39 by 31 is built for each 31-mer. The feature profile is passed to a bidirectional gated recurrent units (GRU) layer with the intention to memories the dependency and relationship among the 31 residues. We set the GRU layer to return a whole sequence as opposed to return a single value. The results are flattened and fed into two fully connected layers with dropout. The output of the RNN network is also a single value between 0 to 1.
-\subsubsection{Architecture of the ensemble network \label{section_ensemble}}
+\subsubsection{Architecture of the Ensemble Network \label{section_ensemble}}
 The final model combines the core layers of the above mentioned CNN and RNN models and tries to further extract essential information of protein binding. The ensemble network takes a sequence of length 31 as its input. Similar to the CNN and RNN components, a 39 by 31 feature vector is constructed and passed to both a convolution layer and a bidirectional GRU layer. The output of the convolution layer is passed on to a maxpool layer and then flattened. The GRU output is also flattened. Then the outputs of the two flatten layers are concatenated and passed on to two fully connected layers with dropout. The last fully connected layer has one output unit with a sigmoid activation function, so the final output is a single value between 0 to 1, indicating the propensity of being binding sites. This is the final output of the entire model. 
 
 Fine tuning is used in this ensemble model. The convolution layer in the CNN network and the bidirectional GRU layer in the RNN network are tuned separated using the same training/validation dataset. After achieving the best performance on the CNN and the RNN components, the weights of the convolution and the GRU layer are saved to files. In the ensemble model, the convolution and the GRU layer load the saved weights from the file and freeze the weights, so that during the process of training, the convolution and the GRU layer stay unchanged. Training and validation data are used again only to train the fully connected layers in the ensemble model. The code snippet on fine tuning is as follows.
@@ -536,7 +537,7 @@ The DELPHI model takes 2.1 hours to train the CNN component, 0.5 hour to train t
 \subsection{Implementation}
 Many open sourced programs in bioinformatics are not well written and maintained. It is frustrating for future researchers spending weeks even months just to compile and run a program. The engineering quality in academia is often compromised and forgiven. Indeed, research novelty is more important than good coding structure, git practise, and readability, but good engineering always plays a key role in successful projects. Projects like LLVM \cite{lattner2004llvm} and TensorFlow \cite{tensorflow2015-whitepaper} have thrived for years with huge open source communities not only because of the back scene innovational ideas, but also because of the excellent code base and infrastructure. We provide here some environment and implementation details hoping to help users to use DELPHI better, recreate results easier, and improve upon the current code base.
 
-\subsubsection{Environment configuration}
+\subsubsection{Environment Configuration}
 System environment configuration is a step many researchers ignore or choose to do improperly. Each project has its unique compiler, package, and environmental variable settings. DevOp skills are not trivial for AI engineers without system configure experience. There are several solutions to ensure users running a program under the correct environment. Containers like docker is a complete industrial solution. Docker stores the entire operation system (OS) in an image, and the users can load the image such that the environment is identical. However, containers at the OS level is too heavy weighted. Lighter weighted solutions such as Python Virtual Environment, Anaconda are sufficient at package level, especially for python package management. According to GitHub statistics in 2019, about 50\% of the machine learning languages are written in Python.
 
 DELPHI uses Python (3.5) Virtual Environment to manage all packages. Each virtual environment has its own packages and dependencies installed locally. Users can switch between any project environment without root permission nor modifying system directories. All packages needed by DELPHI is stored in Requirements.txt. The commands to create the virtual environment for DELPHI are as follows.
@@ -551,7 +552,7 @@ $ pip3 install -r Requirements.txt
 
 The DELPHI program is written in python, with Keras \cite{chollet2015keras} APIs and TensorFlow GPU back end. All features are computed from sequence only. We alleviate the burden of feature computation from users by providing all computation programs and a pipeline script. We ease the system configuration process by providing users a pip package list which enables one-command installation. 
 
-\subsubsection{Class weights}
+\subsubsection{Class Weights}
 Classifying protein binding residue is an imbalanced problem. To cope with that, different class weights \cite{ting2002instance} are assigned to the positive and negative samples, so that the model pays more attention to the minority class, which is the binding sites.  The values are determined by the inverse of the class distribution in the training datasets. In our program, the weights are 0.55 and 4.97 for the non-binding and binding sites respectively. The code piece for implementing the class weights is as follows.
 \begin{lstlisting}[language=python,frame=single,basicstyle=\small]
 # compute the class weight in a balanced manner
@@ -561,18 +562,66 @@ cw = class_weight.compute_class_weight('balanced',
 model.fit(class_weight = cw, ...)
 \end{lstlisting}
 
-\subsubsection{Data shuffling}
+\subsubsection{Data Shuffling}
 During training, we shuffle the data before each epoch. Since the sliding window is used to extract each 31-mer, adjacent data entries are very similar; only the first and the last residue differ from the previous and the next data entry. Shuffling the whole training data diversifies the input in each batch. We experimentally trained the model with and without data shuffling, and shuffling the data rendered better predictions. This can be done by 
 \begin{lstlisting}[language=python,frame=single]
   model.fit(shuffle=True, ...)
 \end{lstlisting}
 
 \subsection{The DELPHI Web Server}
-Blast:
+In order to facilitate the use of DELPHI, we built a web server. The web interface (\texttt{www.csd.uwo.ca/\textasciitilde{}yli922/index.php}) of DELPHI is shown in Fig. \ref{fig_DELPHI_web}. The user can enter protein sequences in FASTA format, and the result will be sent via email upon completion. 
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[width =13 cm]{img/DELPHI_web_server.png}
+\caption[The web interface of DELPHI]{The web interface of DELPHI. \label{fig_DELPHI_web}}
+\end{center}
+\end{figure} 
+
+\subsubsection{The Architecture of the Web Server}
+The overall architecture of the DELPHI web server is shown in Fig \ref{fig_DELPHI_web_arch}. The DELPHI web server consists two components, a front end machine which is responsible for hosting web pages and sending emails, and a back end machine which is mainly for the DELPHI computation. The front end server has the public domain name csd.uwo.ca, and the backend machine is a cloud VM provided by Compute Canada. Users will enter their input sequences using the web page interface, and the sequences will be saved in a designated directory (see "saved user input" in Fig. \ref{fig_DELPHI_web_arch}). A Cron job is set to run every five minutes to automatically monitor the directory. If newly added files are detected, it will trigger a transfer of the input data to a directory (the "user input" in Fig. \ref{fig_DELPHI_web_arch}) on the back end machine. Similarly, another Cron job on the back end server will automatically run every five minutes to monitor that directory. If new files are found, then it will start the input validation and the computation of the DELPHI program. Once the results are ready, the results file will be transferred back to the front end server and emailed to the user.
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[width =13 cm]{img/DELPHI_webserver_architecture.pdf}
+\caption[The architecture of the DELPHI web server]{The architecture of the DELPHI web server. The DELPHI web server consists of two parts, a front end server and a backend server. The front end server hosts the web page and saves the user input to a directory. The back end server is configured with all DELPHI required environment and dependencies. Cron jobs are used to monitor and trigger the data transfer, computation, and the mail action. \label{fig_DELPHI_web_arch}}
+\end{center}
+\end{figure} 
+
+\subsubsection{Front End Server Configuration}
+The front end server is mainly maintained by the Computer Science Department of the University of Western Ontario. It already has the required components for web web service such as Apache, PHP, and SMTP. With that provided, the main task for hosting the DELPHI web page is to write the HTML web page. The data saving part is implemented in PHP. The input data directory is monitored by a cron job, and it can be edited using the following commands.
 \begin{lstlisting}[language=bash,frame=single]
-  sudo apt-get install ncbi-blast+
-  update_blastdb --decompress --passive nr
+crontab  -e
+#run every 5 minutes
+*/5 * * * * [path_to_script].sh >> [path_to_log_file] 2>&1
 \end{lstlisting}
+
+\subsubsection{Back End Server Configuration}
+The back end server is a VM provide by Compute Canada. It has a Ubuntu 18.04 LTS operating system with 12 cores, 24GB of RAM, and 400GB of storage. The could machine needs to be configured first on security settings. The instructions can be found at \texttt{docs.computecanada.ca/wiki/Cloud\_Quick\_Start}. For security reasons, the VM does not allow credential login, so SSH key has to be used. The hard drive is applied separately and need to be mounted to the VM manually. The commands used are as following.
+\begin{lstlisting}[language=bash,frame=single]
+# list available volumes
+sudo fdisk -l
+#mount volume to a directory
+mount [path_to_volume] [path_to_directory]
+\end{lstlisting}
+
+All packages and dependencies required by DELPHI need to be installed. The detailed installation instructions can be found at \texttt{github.com/lucian-ilie/DELPHI}.
+
+\subsubsection{Communications between the Front and Back End Servers}
+The SSH public key of both servers are written into the file
+\texttt{\textasciitilde{}/.ssh/authorized\_keys} on each other, so that transfer can be done without entering passwords. The data transfer process is conducted using rsync which is faster than SCP. The mail command is triggered by appending mail command to SSH command. Both commands are shown as follows.
+\begin{lstlisting}[language=bash,frame=single]
+# the rsync command
+rsync  -r -l -K --progress [source_dir] [destination_dir]
+#execute command on remote machines
+ssh [username@host] "mail [options for mail]"
+\end{lstlisting}
+
+\subsubsection{Pre-computing PSSMs}
+The bottle neck of the DELPHI program is the PSSM computation. In order to accelerate the computation speed, we pre-computed the PSSMs for all testing data as well as the human proteome. We stored the PSSM files and on the back end server and built a dictionary, with key as protein sequence and value as the PSSM file location, in JSON format. When running DELPHI, it first checks if the input sequences is in the database (the JSON file). If the PSSM file exists, DELPHI skips the PSSM computation, otherwise DELPHI computes it. The average computation time for a protein of length 500 on the web server is 3 minuets if having pre-computed PSSM and 15 minutes if without pre-computed PSSM.
+
+\subsubsection{Job Scheduling}
+As shown in Fig. \ref{fig_DELPHI_web_arch}, the back end server has a scheduler to restrict the number of concurrent running jobs to one. If the number of jobs are too many, depends on the input sequence length, DELPHI might exceed the memory limit. The schedule is implemented as follows. Each time a DELPHI job is running, it creates a temporary file delphiIsRuning.tmp. The file will be removed at the completion of the process. Before running each new job, the scheduler script will check the existence of delphiIsRuning.tmp. If it exits, the sleep command will be invoked, and it will wait ten minutes and check again.
+
+
 
 \section{Results}
 We have comprehensively compared DELPHI with nine state-of-the-art machine learning based methods. The comparative analysis shows that DELPHI has a better prediction accuracy in all evaluation metrics. 
@@ -661,14 +710,14 @@ F1=2\times \frac{\textit{Sensitivity}\times \textit{Precision}}{\textit{Sensitiv
 \begin{equation}
 MCC\!=\!\frac{TP \times TN - FN \times FP}{\sqrt{(TP\!+\!FP)\!\times\! (TP\!+\!FN)\! \times \!(TN\!+\!FP)\!\times\!(TN\!+\!FN)}}
 \end{equation}
-\subsection{Performance comparison on Dset\_448 and Dset\_355}
+\subsection{Performance Comparison on Dset\_448 and Dset\_355}
 We first compare the DELPHI model with eight programs on Dset\_448. This dataset is the largest and the most recently published. As shown in Table \ref{tab_comp_448_355}, DELPHI surpasses competitors in all metrics with an improvement of 17.4\%, 18.3\%, and 3.08\% on AUPRC, MCC, and AUROC respectively comparing to the second best program SCRIBER.
 
 As mentioned earlier, Dset\_448 cannot be used for DLPred, so we include a comparison of all programs on Dset\_355. As shown in Table \ref{tab_comp_448_355}, the performance of DLPred is very similar to the second best predictor, SCRIBER.  DELPHI still surpasses the second best program by 18.5\% and 20.9\% on AUPRC and MCC.
 
 \begin{table}
   \centering
-  \caption[Performance comparison on Dset\_448 and Dset\_355]{Performance comparison on Dset\_448 and Dset\_355. Programs are sorted in ascending order by AUPRC. Darker colours represent better results. The evaluation of the programs marked with ${}^*$ is by  \cite{zhang2019scriber}.}
+  \caption[Performance Comparison on Dset\_448 and Dset\_355]{Performance comparison on Dset\_448 and Dset\_355. Programs are sorted in ascending order by AUPRC. Darker colours represent better results. The evaluation of the programs marked with ${}^*$ is by  \cite{zhang2019scriber}.}
     % Table generated by Excel2LaTeX from sheet 'Sheet2'
     \begin{tabular}{@{}l@{\ }*{8}{r}}
     \toprule
@@ -702,7 +751,7 @@ As mentioned earlier, Dset\_448 cannot be used for DLPred, so we include a compa
   \label{tab_comp_448_355}%
 \end{table}%
 
-\subsection{Performance comparison on Dset\_186, Dset\_164, and Dset\_72}
+\subsection{Performance Comparison on Dset\_186, Dset\_164, and Dset\_72}
 To further compare DELPHI with other programs, we used another three previously published datasets: Dset\_186, Dset\_164, and Dset\_72. Based on the availability and usability, We ran SPPIDER, PSIVER, CRFPPI, SCRIBER, DELPred, and DELPHI on them. Note that SSWRF, CRFPPI, and PSIVER use Dset\_186 as their training datasets, so these three programs are excluded on Dset\_186. As shown in Table \ref{tab_ds186_164_72}, in general, the performance rank is the very similar to the ones in Dset\_448 and Dset\_355.
 
 DELPHI clearly outperforms the competitors in all metrics on all datasets although it shares the least similarities to the testing datasets.  The AUPRC is improved by 10.0\%, 0.6\%, 10.2\% comparing to the second best program on each dataset. The improvement on MCC are 18.7\%, 8.9\%, 27.7\% on each dataset. 
@@ -743,8 +792,8 @@ DELPHI clearly outperforms the competitors in all metrics on all datasets althou
     \end{tabular}%
 \end{table}%
 
-\subsection{Ablation study}
-\subsubsection{Feature evaluation}
+\subsection{Ablation Study}
+\subsubsection{Feature Evaluation}
 We conducted an another experiment to show that all twelve feature are necessary for DELPHI. We pruned one feature each time, and the remaining eleven features are used to train and then evaluate the DELPHI model. As shown in Fig. \ref{fig_remove_each_feature}, the performance decreases with the removal of any feature, showing that there are no redundant features. It is perhaps expected that  removing PSSM creates the biggest performance drop, but our newly introduced features, HSP, ProtVec1D, and Position are shown to be  very useful as well. 
 \begin{figure}[!h]
 \begin{center}
@@ -753,7 +802,7 @@ We conducted an another experiment to show that all twelve feature are necessary
 \end{center}
 \end{figure}
 
-\subsubsection{The evaluation of the model architecture and the novel features\label{sec_arch_fea}}
+\subsubsection{The Evaluation of the Model Architecture and the Novel Features\label{sec_arch_fea}}
 To show that the ensemble architecture and the three novel features improve the performance, we evaluated the CNN, RNN, and the ensemble model separately on Dset\_448 with and without the three new features, a total of six tests. Training is done as before (section \ref{section_ensemble}). In Fig. \ref{fig_CNN_RNN_ensemble}, we plotted the value of AUPRC and MCC of the six tests. Clearly, the ensemble model outperforms the individual CNN and RNN models. Further, the improvement due to the three new features is even higher, with the weakest model, CNN, on 12 features outperforming the ensemble on 9 features. 
 
 \begin{figure}
@@ -763,10 +812,87 @@ To show that the ensemble architecture and the three novel features improve the 
   \label{fig_CNN_RNN_ensemble}
 \end{figure}
 
-\subsection{Availability}
-DELPHI is an open source program under the GPLv3 License. The trained model, source code of training, predicting, and data processing is freely available at\\ \texttt{https://github.comlucian-ilie/DELPHI}. 
-All datasets used in this study can be downloaded at \texttt{http://www.csd.uwo.ca/\~{}ilie/DELPHI/}.\\
-\section{Conclusion}
-We introduced our sequence based PPI site prediction program, DELPHI. DELPHI has an ensemble structure which combines a CNN and a RNN component with fine tuning technique. Three novel features, HSP, position information, and ProtVec are used in addition to nine existing ones. We comprehensively compare DELPHI to nine state-of-the-art programs on five datasets, and DELPHI outperforms the competing methods in all metrics even though its training dataset shares the least similarities with the testing datasets. In the most important metrics, AUPRC and MCC, it surpasses the second best programs by as much as 18.5\% and 27.7\%, resp. We also demonstrated that the improvement is essentially due to using the ensemble model and, especially, the three new features.
+\subsection{\textcolor{\mySecondColor}{Evolutionary Conservation}}
 
-The contributions of the DELPHI study are as follows. First, a novel fine tuned ensemble model combing CNN and RNN is constructed. Second, three novel features, which are believed to be used the first time in PPI binding site prediction, are introduced. Third, a data processing and feature construction suite, is provided, aiming to alleviating the difficulty of tedious feature computation by the users.
+\textcolor{\mySecondColor}{As an application of DELPHI's predictive power we analyzed three different proteins.  These are the transcription factor SH2D2A (399 amino acids in length), the alpha-subunit of the haemoglobin protein (142 amino acids in length) and the SRY protein (204 amino acids
+in length).}
+
+\textcolor{\mySecondColor}{For each protein, BLASTP was used to search for homologues.  The search was restricted to the refseq\_protein database to ensure good quality and
+to proteins from mammalian organisms.  The SH2D2A sequences were further
+limited to isoform X1 and the haemoglobins sequences were restricted to
+proteins labelled as alpha subunits.  Sequences were aligned with MUSCLE
+\cite{edgar2004muscle} and any sequences with unusually long protein distances
+were further eliminated by hand.}
+
+\textcolor{\mySecondColor}{This resulted in 66 homologous SH2D2A sequences, 178 homologous alpha
+subunit haemoglobin sequences and 40 homolgous SRY sequences.  For each
+site in the alignment of these proteins, the frequency of the most
+conserved amino acid was recorded and compared to the PPI binding sites predicted by
+DELPHI in Figure~\ref{fig_conservation_vs_sitePred}.  There are gaps in these figures since only aligned
+sites present in more than 10 taxa were included in this comparison.}
+
+\textcolor{\mySecondColor}{In general, Figure~\ref{fig_conservation_vs_sitePred}.a and Figure~\ref{fig_conservation_vs_sitePred}.c shows that the locations where
+DELPHI predicted a high probability of a protein-protein interaction are
+also the sites with a high degree of sequence conservation.  As expected
+this correlation is not perfect since sequence conservation can occur
+for many reasons other than PPI.  It will also be noted that the overall
+degree of conservation in Figure~\ref{fig_conservation_vs_sitePred}.a for the alpha haemoglobin proteins is
+much more conserved than for the other two proteins and is an indication
+that these proteins are evolving slower.  Still PPI has a high probability
+around 130aa, 185aa and 240aa but has a lower probability at the sites
+around 175aa.  Similarly for sites around 350aa and 500aa in Figure~\ref{fig_conservation_vs_sitePred}.c
+(protein SH2D2A) the PPI is low but the level of conservation is high.}
+
+\textcolor{\mySecondColor}{The protein SRY in Figure~\ref{fig_conservation_vs_sitePred}.b binds to sites in the DNA rather
+than to other proteins or internally.  This is the reason for the
+high conservation around 190aa to 260aa.  Except for two sites the
+probabilities predicted by DELPHI fluctuate around low values.}
+
+\textcolor{\mySecondColor}{In general the data in Figure~\ref{fig_conservation_vs_sitePred} show that sites with a high probability
+of PPI have a high degree of sequence conservation and indicate good
+support for the validity of the method.  The opposite is not true.
+Sequence conservation can occur for reasons other than the requirement
+that the sites are constrained by protein-protein interactions.}
+
+\begin{sidewaysfigure}
+\centering
+\begin{tabular}{cc}
+\includegraphics[height=3.5cm]{img/hemoglobin_top178_conservation.pdf} & 
+\includegraphics[height=3.5cm]{img/SRY_conservation.pdf}\\
+\small (a) & \small (b)\\
+\multicolumn{2}{c}{\includegraphics[height=3.5cm]{img/SH2_conservation.pdf}}\\
+\multicolumn{2}{c}{\small (c)}
+\end{tabular}
+  \caption[Comparison between DELPHI predictions and evolutionary conservation]{Three proteins were evaluated to compare the PPI binding sites predicted by DELPHI (orange) with the degree of site-by-site conservation (blue).  Only sites represented in ten or more taxa are included resulting in some apparent gaps.  The proteins are (a) alpha haemoglobin, (b) SRY and (c) SH2D2A.} 
+  \label{fig_conservation_vs_sitePred}
+\end{sidewaysfigure}
+
+
+\begin{figure}
+\centering
+\includegraphics[width=\columnwidth]{img/plot_DS448_domain.pdf}
+  \caption[A comparison of the predicted PBRs from DELPHI and from SCRIBER compared to native PBRs.]{A comparison of the predicted PBRs from DELPHI and from SCRIBER compared to native PBRs. It is apparent that DELPHI fits the curve better except perhaps at the low end where there are few PBR residues per domain.} 
+  \label{fig_plot_DS448_domain}
+\end{figure}
+
+
+\subsection{\textcolor{\mySecondColor}{Accuracy of PBR Prediction}}
+% I don't think that there is sufficient information here to warrant a separate section.
+\textcolor{\mySecondColor}{Following Zhang and Kurgan (2019) we compared the protein-binding residues (PBRs) predicted by SCRIBER and by DELPHI on DSet\_448.  
+A total of 600 domains with native PBRs were collected from the Pfam (El-Gebali et al., 2019) annotation of proteins by Zhang and Kurgan (2019).  
+Figure \ref{fig_plot_DS448_domain} shows the number of PBRs in these domains and compares them to the numbers predicted by SCRIBER and DELPHI. 
+It is apparent that DELPHI has a closer fit to the native data and this is especially 
+true with larger numbers of PBRs per domain but DELPHI perhaps over estimates the percentage of domains with PBRs when there are few PBRs per domain.}
+
+\subsection{\textcolor{\mySecondColor}{Human Proteome Prediction}}
+\textcolor{\mySecondColor}{
+To further assist users, we ran DELPHI on the entire human proteome. The sequences are downloaded from Uniprot in June 2020. All the prediction results are available to download at \texttt{www.csd.uwo.ca/\textasciitilde{}yli922/index.php}.
+}
+
+\subsection{Availability}
+DELPHI is available both as a open sourced standalone software under the GPLv3 License and web server. The trained model, source code, and data processing pipeline are freely available at \texttt{github.com/lucian-ilie/DELPHI}.\\The web server is at \texttt{www.csd.uwo.ca/\textasciitilde{}yli922/index.php}.
+\section{Conclusion}
+We introduced our sequence based PPI site prediction program, DELPHI. DELPHI has an ensemble structure which combines a CNN and a RNN component with fine tuning technique. Three novel features, HSP, position information, and ProtVec are used in addition to nine existing ones. We comprehensively compare DELPHI to nine state-of-the-art programs on five datasets, and DELPHI outperforms the competing methods in all metrics even though its training dataset shares the least similarities with the testing datasets. In the most important metrics, AUPRC and MCC, it surpasses the second best programs by as much as 18.5\% and 27.7\%, resp. We also demonstrated that the improvement is essentially due to using the ensemble model and, especially, the three new features. Using DELPHI it is shown that there is a strong correlation with protein-binding residues (PBRs) and sites with strong evolutionary conservation.  In addition DELPHI's predicted PBR sites closely match known data from Pfam.
+DELPHI is available as open sourced standalone software and web server.
+
+The contributions of the DELPHI study are as follows. First, a novel fine tuned ensemble model combing CNN and RNN is constructed. Second, three novel features, which are believed to be used the first time in PPI binding site prediction, are introduced. Third, a data processing and feature construction suite, in the form of both source code and web server, is provided, aiming to alleviating the difficulty of tedious feature computation by the users.
